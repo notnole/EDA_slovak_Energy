@@ -1,0 +1,135 @@
+================================================================================
+ADVANCED LABEL ANALYSIS REPORT
+================================================================================
+
+
+================================================================================
+1. AUTOCORRELATION DECAY
+================================================================================
+
+Key ACF values:
+  Lag 1 (15 min): 0.7598
+  Lag 4 (1 hour): 0.5996
+  Lag 96 (24 hours): 0.2289
+
+PACF (direct effects):
+  Lag 1: 0.7598
+  Lag 2: 0.1671
+
+Information content:
+  50% of ACF info in first 7 lags (1.8 hours)
+  90% of ACF info in first 94 lags (23.5 hours)
+  Last significant lag: 200 (50.0 hours)
+
+IMPLICATION: Use lag features up to ~4-8 lags for most information
+
+
+================================================================================
+2. EXTREME EVENTS
+================================================================================
+
+Thresholds:
+  P1: -33.36 MWh
+  P5: -15.60 MWh
+  P95: 21.19 MWh
+  P99: 35.29 MWh
+
+Clustering:
+  Total extreme runs: 2951
+  Mean run length: 2.45 periods (37 min)
+  Max run length: 48 periods (12.0 hours)
+
+IMPLICATION: Extreme events cluster - if extreme, likely to stay extreme
+
+
+================================================================================
+3. PERSISTENCE / RUNS
+================================================================================
+
+Transition probabilities:
+  P(positive | positive): 78.0%
+  P(negative | negative): 72.5%
+
+Run lengths:
+  Mean positive run: 4.54 periods
+  Mean negative run: 3.64 periods
+  Median run: 2 periods
+  90th percentile run: 10 periods
+  Max positive run: 100 periods (25.0 hours)
+  Max negative run: 109 periods (27.2 hours)
+
+IMPLICATION: Strong persistence - sign feature from previous period is useful
+
+
+================================================================================
+4. CONDITIONAL DISTRIBUTIONS
+================================================================================
+
+Regression (current on previous):
+  Slope: 0.7598
+  Intercept: 0.3871
+
+Conditional means:
+  After low values: -6.50 MWh
+  After high values: 10.31 MWh
+
+Conditional volatility:
+  During low volatility: 6.93 MWh
+  During high volatility: 16.83 MWh
+
+IMPLICATION: Mean reversion present (slope=0.76<1)
+
+
+================================================================================
+5. STATIONARITY
+================================================================================
+
+ADF Test (H0: non-stationary):
+  Statistic: -17.4233
+  P-value: 0.000000
+  Result: STATIONARY
+
+KPSS Test (H0: stationary):
+  Statistic: 1.0722
+  P-value: 0.0100
+  Result: NON-STATIONARY
+
+IMPLICATION: Series is stationary - no differencing needed
+
+
+================================================================================
+6. ARCH EFFECTS (Volatility Clustering)
+================================================================================
+
+ARCH LM Test (H0: no ARCH effects):
+  Statistic: 24305.5817
+  P-value: 0.000000
+  Result: ARCH EFFECTS PRESENT
+
+Squared residuals ACF:
+  Lag 1: 0.5490
+  Significant lags: 96
+
+IMPLICATION: Volatility clusters - rolling_std is a useful feature
+
+
+================================================================================
+SUMMARY: IMPLICATIONS FOR NOWCASTING MODEL
+================================================================================
+
+FEATURE RECOMMENDATIONS:
+  1. Lag features: Use lags 1-4 (captures 105min of history)
+  2. Sign persistence: P(same sign) = 78%
+  3. Rolling volatility: ARCH effects present, volatility is predictable
+  4. Mean reversion: Slope=0.76 suggests partial reversion
+
+MODEL CONSIDERATIONS:
+  - Series is stationary (no differencing needed)
+  - Strong autocorrelation (lag features valuable)
+  - Volatility clusters (prediction intervals should vary)
+  - Extreme events cluster (momentum during extremes)
+
+
+================================================================================
+END OF REPORT
+================================================================================

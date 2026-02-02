@@ -1,0 +1,31 @@
+============================================================
+FEATURE-LABEL CORRELATION REPORT
+============================================================
+
+Correlation with Imbalance (MWh):
+----------------------------------------
+  regulation_mw_deviation       : r = -0.6721
+  regulation_mw                 : r = -0.6673
+  load_mw_deviation             : r = -0.1157
+  load_mw                       : r = -0.1010
+  production_mw                 : r = -0.0499
+  production_mw_deviation       : r = -0.0424
+  export_import_mw              : r = +0.0241
+  export_import_mw_deviation    : r = +0.0055
+
+INTERPRETATION:
+----------------------------------------
+  - Regulation is the inverse of imbalance (strong negative correlation expected)
+  - Deviation features capture 'surprise' vs expected
+  - Higher |r| = more predictive power
+
+FEATURE RANKING (by |correlation|):
+----------------------------------------
+  1. regulation_mw_deviation: |r| = 0.6721
+  2. regulation_mw: |r| = 0.6673
+  3. load_mw_deviation: |r| = 0.1157
+  4. load_mw: |r| = 0.1010
+  5. production_mw: |r| = 0.0499
+  6. production_mw_deviation: |r| = 0.0424
+  7. export_import_mw: |r| = 0.0241
+  8. export_import_mw_deviation: |r| = 0.0055

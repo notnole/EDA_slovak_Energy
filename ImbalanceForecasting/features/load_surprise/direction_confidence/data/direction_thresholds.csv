@@ -1,0 +1,6 @@
+confidence,predict_positive_threshold,predict_negative_threshold
+60,-62.5,87.5
+65,-62.5,137.5
+70,-112.5,162.5
+75,-137.5,212.5
+80,-237.5,237.5

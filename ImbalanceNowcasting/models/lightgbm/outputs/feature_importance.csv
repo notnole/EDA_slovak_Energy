@@ -1,0 +1,14 @@
+feature,importance
+baseline_pred,13909043.308574677
+reg_cumulative_mean,12744421.231929302
+imb_proxy_rolling_mean4,7887696.99489212
+imb_proxy_lag1,2799783.1939315796
+hour_sin,1574732.6600780487
+hour_cos,1412639.7817955017
+load_deviation,1306572.5776700974
+imb_proxy_lag2,901819.6154384613
+imb_proxy_rolling_std4,752264.2893865108
+is_weekend,182600.15631103516
+reg_std,0.0
+reg_range,0.0
+reg_trend,0.0

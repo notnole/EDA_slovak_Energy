@@ -1,0 +1,3 @@
+condition,group,correlation,p_value,n_samples,condition_label
+is_weekend,False,-0.6666799453842668,0.0,50675,Weekday
+is_weekend,True,-0.6657893933122306,0.0,20523,Weekend

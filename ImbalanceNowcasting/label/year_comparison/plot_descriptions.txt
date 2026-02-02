@@ -1,0 +1,127 @@
+================================================================================
+PLOT 01: DISTRIBUTION COMPARISON
+================================================================================
+
+Top-left: Normalized histograms overlay
+  2024: mean=0.95, median=0.48
+  2025-2026: mean=2.24, median=1.42
+  Mean shift: +1.29 MWh
+
+Top-right: Side-by-side boxplots
+  2024: IQR=[-3.64, 5.59]
+  2025-2026: IQR=[-3.43, 7.60]
+
+Bottom-left: Sign distribution
+  2024: 53.2% surplus, 46.8% deficit
+  2025-2026: 57.7% surplus, 42.3% deficit
+  Shift: +4.5% toward surplus
+
+Bottom-right: Percentile comparison (P1 to P99)
+
+
+================================================================================
+PLOT 02: DAILY (INTRADAY) COMPARISON
+================================================================================
+
+Top-left: Hourly mean pattern with std bands
+Top-right: Side-by-side hourly boxplots
+
+Key differences:
+  Largest change: 19:00 (+2.86 MWh)
+  Smallest change: 11:00 (+0.28 MWh)
+  Average hourly diff: +1.29 MWh
+
+Bottom-left: Hourly volatility (std) comparison
+Bottom-right: Difference plot (2025-2026 - 2024)
+
+
+================================================================================
+PLOT 03: WEEKLY COMPARISON
+================================================================================
+
+Top-left: Day of week means with error bars
+Top-right: Side-by-side daily boxplots
+
+Day-by-day comparison:
+  Mon: 2024=1.36, 2025-2026=3.06, diff=+1.70
+  Tue: 2024=0.10, 2025-2026=1.32, diff=+1.22
+  Wed: 2024=-0.75, 2025-2026=0.86, diff=+1.61
+  Thu: 2024=0.48, 2025-2026=1.02, diff=+0.54
+  Fri: 2024=1.61, 2025-2026=2.69, diff=+1.08
+  Sat: 2024=1.03, 2025-2026=2.86, diff=+1.83
+  Sun: 2024=2.81, 2025-2026=3.86, diff=+1.05
+
+Bottom-left: Weekday vs Weekend breakdown
+Bottom-right: Difference plot by day
+
+
+================================================================================
+PLOT 04: MONTHLY COMPARISON
+================================================================================
+
+Top-left: Monthly pattern with both periods
+Top-right: January comparison across years (2024, 2025, 2026)
+
+January year-over-year:
+  Jan 2024: mean=0.43, std=8.35
+  Jan 2025: mean=3.64, std=11.17
+  Jan 2026: mean=-2.37, std=13.63
+
+Bottom-left: Day-of-year pattern overlay
+Bottom-right: Monthly volatility comparison
+
+
+================================================================================
+PLOT 05: TIME SERIES COMPARISON
+================================================================================
+
+Top: Full time series colored by period
+  2024: 35,132 observations
+  2025-2026: 37,243 observations
+
+Middle: Daily mean time series
+Bottom: 7-day rolling mean with period averages
+
+
+================================================================================
+PLOT 06: MICROSTRUCTURE COMPARISON
+================================================================================
+
+Top-left: Autocorrelation Function (ACF)
+  Shows how current value correlates with past values
+  Correlation between periods: r=0.9977
+  INTERPRETATION: Nearly identical memory structure
+
+Top-right: Partial Autocorrelation Function (PACF)
+  Shows direct correlation after removing intermediate effects
+  Correlation between periods: r=0.9980
+
+Middle-left: Volatility Clustering (ACF of squared deviations)
+  Shows if high/low volatility periods cluster together
+  Correlation between periods: r=0.9424
+  INTERPRETATION: Similar volatility dynamics
+
+Middle-right: Rolling volatility distribution (5h window)
+  2024 mean rolling std: 7.63 MWh
+  2025-2026 mean rolling std: 7.63 MWh
+
+Bottom-left: Period-to-period changes distribution
+  2024 change std: 8.59 MWh
+  2025-2026 change std: 7.99 MWh
+  Difference: 7.0%
+
+Bottom-right: ACF of first differences (stationarized)
+  Correlation between periods: r=0.9945
+
+
+================================================================================
+OVERALL MICROSTRUCTURE CONCLUSION
+================================================================================
+
+[CONFIRMED] Microstructure is HIGHLY SIMILAR between periods
+  - Time series memory: IDENTICAL
+  - Volatility clustering: SIMILAR
+  - Change dynamics: IDENTICAL
+
+  => Safe to combine data for ML training
+  => Mean shift can be handled with relative features

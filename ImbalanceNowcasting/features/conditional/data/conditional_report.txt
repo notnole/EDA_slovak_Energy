@@ -1,0 +1,22 @@
+CONDITIONAL ANALYSIS REPORT
+==================================================
+
+Baseline regulation-imbalance correlation: r = -0.6673
+Total samples: 71,198
+
+CORRELATION STABILITY BY CONDITION
+--------------------------------------------------
+
+Weekend             : -0.667 to -0.666 (range: 0.001) - YES
+Hour                : -0.785 to -0.459 (range: 0.326) - NO
+Month               : -0.742 to -0.574 (range: 0.168) - NO
+Load Level          : -0.690 to -0.654 (range: 0.036) - YES
+Imbalance Magnitude : -0.776 to -0.133 (range: 0.644) - NO
+Load Ramp           : -0.683 to -0.636 (range: 0.047) - YES
+Regulation Sign     : -0.581 to -0.545 (range: 0.036) - YES
+
+KEY FINDINGS
+--------------------------------------------------
+
+Most variable: Imbalance Magnitude (range: 0.644)
+Most stable: Weekend (range: 0.001)

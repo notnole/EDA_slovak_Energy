@@ -1,0 +1,53 @@
+======================================================================
+WITHIN QUARTER-HOUR DYNAMICS ANALYSIS
+======================================================================
+
+1. REGULATION EVOLUTION
+----------------------------------------
+Mean regulation at each minute in settlement period:
+  Minute  0: mean= -8.25 MW, std=47.66 MW
+  Minute  3: mean= -9.98 MW, std=50.12 MW
+  Minute  6: mean= -6.33 MW, std=48.36 MW
+  Minute  9: mean= -5.10 MW, std=49.91 MW
+  Minute 12: mean= -6.13 MW, std=48.05 MW
+
+2. PREDICTIVE POWER BY MINUTE
+----------------------------------------
+Correlation with final 15-min imbalance:
+  Minute  0: r = -0.6848 (R² = 46.9%)
+  Minute  3: r = -0.6817 (R² = 46.5%)
+  Minute  6: r = -0.8221 (R² = 67.6%)
+  Minute  9: r = -0.8726 (R² = 76.1%)
+  Minute 12: r = -0.8952 (R² = 80.1%)
+
+Cumulative mean correlation:
+  After  3 min: r = -0.6848 (R² = 46.9%)
+  After  6 min: r = -0.7079 (R² = 50.1%)
+  After  9 min: r = -0.7819 (R² = 61.1%)
+  After 12 min: r = -0.8491 (R² = 72.1%)
+  After 15 min: r = -0.8888 (R² = 79.0%)
+
+3. WITHIN-QH VARIABILITY FEATURES
+----------------------------------------
+  qh_mean     : r = -0.8888
+  qh_std      : r = -0.0145
+  qh_range    : r = -0.0142
+  qh_trend    : r = -0.2603
+
+4. EARLY WARNING CAPABILITY
+----------------------------------------
+Separation of regulation for extreme vs normal imbalances:
+  Minute  0: neg_sep=+56.34, pos_sep=-64.98
+  Minute  3: neg_sep=+59.54, pos_sep=-68.39
+  Minute  6: neg_sep=+69.56, pos_sep=-79.95
+  Minute  9: neg_sep=+77.02, pos_sep=-87.56
+  Minute 12: neg_sep=+76.28, pos_sep=-86.12
+
+======================================================================
+KEY FINDINGS
+======================================================================
+  Best single minute: 12 (r = -0.8952)
+  Improvement from 3min to 15min data: +29.8%
+  Best variability feature: qh_mean (r = -0.8888)
+
+======================================================================

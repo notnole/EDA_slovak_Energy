@@ -1,0 +1,89 @@
+================================================================================
+PLOT 01: TIME SERIES OVERVIEW
+================================================================================
+
+Top panel: Full 15-minute resolution time series
+  - Green shading: Positive imbalance (surplus/over-generation)
+  - Red shading: Negative imbalance (deficit/under-generation)
+
+Middle panel: Daily aggregated mean +/- std dev
+  - Daily mean range: -30.14 to 23.30 MWh
+  - Avg daily volatility: 9.78 MWh
+
+Bottom panel: Distribution histogram
+  - Mean: 1.61 MWh
+  - Median: 0.91 MWh
+  - Std Dev: 11.96 MWh
+  - Skewness: -0.43 (left-skewed)
+
+
+================================================================================
+PLOT 02: DAILY (INTRADAY) SEASONALITY
+================================================================================
+
+Top-left: Hourly boxplots showing distribution per hour
+Top-right: 15-min settlement period pattern (96 periods/day)
+
+Key findings:
+  - Peak hour: 13:00 (mean: 3.58 MWh)
+  - Trough hour: 20:00 (mean: -0.17 MWh)
+  - Most volatile hour: 11:00 (std: 16.55 MWh)
+  - Daily amplitude: 3.75 MWh
+
+Bottom-left: Hourly mean with 95% confidence interval
+Bottom-right: Heatmap of mean imbalance by hour and day of week
+
+
+================================================================================
+PLOT 03: WEEKLY SEASONALITY
+================================================================================
+
+Top-left: Day of week boxplots
+Top-right: Day of week means with error bars
+
+Key findings:
+  - Highest day: Sunday (mean: 3.35 MWh)
+  - Lowest day: Wednesday (mean: 0.08 MWh)
+  - Weekday mean: 1.19 MWh
+  - Weekend mean: 2.66 MWh
+  - Weekend effect: +1.46 MWh
+
+Bottom-left: Weekday vs Weekend comparison
+Bottom-right: Weekly aggregated time series
+
+
+================================================================================
+PLOT 04: MONTHLY SEASONALITY
+================================================================================
+
+Top-left: Monthly boxplots (colored by season)
+  - Blue: Winter (Dec-Feb)
+  - Green: Spring (Mar-May)
+  - Red: Summer (Jun-Aug)
+  - Orange: Autumn (Sep-Nov)
+
+Key findings:
+  - Peak month: Apr (mean: 2.89 MWh)
+  - Trough month: Oct (mean: 0.25 MWh)
+  - Most volatile: Nov (std: 15.02 MWh)
+  - Seasonal amplitude: 2.64 MWh
+
+Top-right: Monthly means with 95% CI
+Bottom-left: Monthly time series trend
+Bottom-right: Monthly volatility (std dev)
+
+
+================================================================================
+PLOT 05: YEARLY SEASONALITY
+================================================================================
+
+Top-left: Yearly comparison boxplots
+Top-right: Day-of-year pattern overlay (7-day rolling mean)
+
+Yearly statistics:
+  2024: mean=0.95, std=12.50, n=35,132
+  2025: mean=2.54, std=11.16, n=34,939
+  2026: mean=-2.37, std=13.63, n=2,304
+
+Bottom-left: Year-over-year mean and volatility
+Bottom-right: Quarterly pattern by year

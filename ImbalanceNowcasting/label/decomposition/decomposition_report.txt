@@ -1,0 +1,123 @@
+================================================================================
+TIME SERIES DECOMPOSITION ANALYSIS
+================================================================================
+
+
+================================================================================
+PLOT 01: STL DECOMPOSITION (Daily Period = 96)
+================================================================================
+
+Decomposes time series into:
+  - Trend: Slowly varying component (local average)
+  - Daily Seasonal: Repeating 24-hour pattern
+  - Residual: What's left (unpredictable component)
+
+Variance explained:
+  Trend: 10.5%
+  Daily Seasonal: 24.0%
+  Residual: 63.1%
+
+Residual statistics:
+  Mean: 0.0411 MWh
+  Std: 9.50 MWh
+  Original std: 11.96 MWh
+  Std reduction: 20.6%
+
+
+================================================================================
+PLOT 02: MSTL DECOMPOSITION (Daily=96, Weekly=672)
+================================================================================
+
+Decomposes time series into:
+  - Trend: Slowly varying component
+  - Daily Seasonal: Repeating 24-hour pattern
+  - Weekly Seasonal: Repeating 7-day pattern
+  - Residual: What's left
+
+Variance explained:
+  Trend: 6.2%
+  Daily Seasonal: 19.6%
+  Weekly Seasonal: 8.3%
+  Residual: 56.8%
+
+Residual statistics:
+  Mean: -0.0053 MWh
+  Std: 9.02 MWh
+  Std reduction: 24.6%
+
+
+================================================================================
+PLOT 03: SPECTRAL ANALYSIS
+================================================================================
+
+Dominant periods (15-min intervals):
+  1. Period=670 (167.5 hours), Power=2508042135
+  2. Period=4 (1 hour), Power=2390907818
+  3. Period=4 (1 hour), Power=2320668494
+  4. Period=2412 (603.0 hours), Power=1934392616
+  5. Period=96 (24 hours (daily)), Power=1868671059
+  6. Period=2 (0.5 hours), Power=1175278287
+  7. Period=510 (127.5 hours), Power=1152194867
+  8. Period=8042 (2010.5 hours), Power=1062049139
+  9. Period=458 (114.5 hours), Power=853505236
+  10. Period=1683 (420.8 hours), Power=839754958
+
+Cumulative variance:
+  50% explained by top 822 frequency components
+  90% explained by top 9597 frequency components
+
+
+================================================================================
+PLOT 04: VARIANCE DECOMPOSITION
+================================================================================
+
+Compares how much variance each component explains.
+Lower residual variance = better decomposition.
+
+Residual comparison:
+  STL residual std: 9.50 MWh
+  MSTL residual std: 9.02 MWh
+  MSTL improvement: 0.49 MWh
+
+
+================================================================================
+PLOT 05: SEASONAL PATTERNS
+================================================================================
+
+Extracted seasonal patterns that repeat regularly:
+  - Daily pattern: Shows intraday cycle
+  - Weekly pattern: Shows day-of-week effects
+
+Daily pattern characteristics:
+  Peak: 15.0:00 (4.80 MWh)
+  Trough: 20.0:00 (-5.35 MWh)
+  Amplitude: 10.15 MWh
+
+
+================================================================================
+IMPLICATIONS FOR ML NOWCASTING
+================================================================================
+
+1. PREDICTABLE PORTION: 43.2% of variance
+   - Can be captured by trend + seasonal features
+   - Use HoD, DoW, rolling means as features
+
+2. UNPREDICTABLE PORTION: 56.8% of variance
+   - This is what your model needs to learn
+   - Residual std: 9.02 MWh (vs original 11.96 MWh)
+
+3. RECOMMENDED FEATURES:
+   - Hour of day (captures daily seasonal)
+   - Day of week (captures weekly seasonal)
+   - Rolling mean/std (captures trend + local dynamics)
+   - Lag features (residual has some autocorrelation)
+
+4. EXPECTED BASELINE PERFORMANCE:
+   - Naive (use last value): RMSE ~ 8.29 MWh
+   - Seasonal naive (same hour yesterday): RMSE ~ 14.85 MWh
+   - Perfect decomposition: RMSE ~ 9.02 MWh
+
+
+================================================================================
+END OF REPORT
+================================================================================

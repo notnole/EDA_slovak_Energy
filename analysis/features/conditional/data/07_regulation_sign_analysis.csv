@@ -1,0 +1,3 @@
+condition,group,correlation,p_value,n_samples
+reg_sign,Negative (Undersupply),-0.5812286398550719,0.0,39180
+reg_sign,Positive (Oversupply),-0.5450881561351012,0.0,32018

@@ -1,0 +1,9 @@
+original_path,clean_name,category
+RawData\3MIN_REG.csv,regulation_1min.csv,scada
+RawData\3MIN_Load.csv,system_load_3min.csv,scada
+RawData\3MIN_Prod.csv,system_production_1min.csv,scada
+RawData\3MIN_Export.csv,real_balance_1min.csv,scada
+RawData\3MIN_ACK_REAL_BALNCE.csv,ack_real_balance_1min.csv,scada
+RawData\ProductionPerType.csv,production_by_type_hourly.csv,scada
+RawData\Claudes.csv,cloud_cover_15min.csv,weather
+RawData\Tampreture.csv,temperature_15min.csv,weather
