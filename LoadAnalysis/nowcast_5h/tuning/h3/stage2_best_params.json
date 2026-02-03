@@ -1,0 +1,35 @@
+{
+  "horizon": 3,
+  "stage2_mae": 51.26790117905686,
+  "stage1_mae": 56.56491601491435,
+  "improvement": 9.364488112137996,
+  "fold_maes": [
+    55.9779569922185,
+    47.68625777573685,
+    50.13948876921524
+  ],
+  "s2_features": [
+    "residual_lag1",
+    "residual_lag2",
+    "residual_lag3"
+  ],
+  "s2_params": {
+    "s2_include_residual_lags": true,
+    "s2_max_residual_lag": 3,
+    "s2_include_residual_rolling": false,
+    "s2_include_residual_trends": false,
+    "s2_n_estimators": 154,
+    "s2_learning_rate": 0.0410511718148681,
+    "s2_max_depth": 3,
+    "s2_num_leaves": 16,
+    "s2_min_child_samples": 9,
+    "s2_subsample": 0.8481594375815562,
+    "s2_colsample_bytree": 0.9922185490657578,
+    "s2_reg_alpha": 0.021529435000213665,
+    "s2_reg_lambda": 0.22940472366526057,
+    "s2_recency_months": 2,
+    "s2_recency_weight": 1.2245281748350114
+  },
+  "trial_number": 76,
+  "timestamp": "2026-02-02T18:38:17.506056"
+}

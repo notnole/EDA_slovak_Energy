@@ -1,0 +1,45 @@
+{
+  "horizon": 2,
+  "mae": 48.359619277604914,
+  "fold_maes": [
+    51.21273633177285,
+    45.641002256511584,
+    48.22511924453031
+  ],
+  "features": [
+    "error_lag1",
+    "error_lag2",
+    "error_lag3",
+    "load_volatility_lag1",
+    "load_trend_lag1",
+    "seasonal_error",
+    "hour",
+    "hour_sin",
+    "hour_cos",
+    "dow",
+    "is_weekend"
+  ],
+  "params": {
+    "include_error_lags": true,
+    "max_error_lag": 3,
+    "include_rolling_stats": false,
+    "include_error_trends": false,
+    "include_3min_features": true,
+    "include_regulation": false,
+    "include_seasonal_error": true,
+    "include_time_features": true,
+    "n_estimators": 340,
+    "learning_rate": 0.010797173348012636,
+    "max_depth": 12,
+    "num_leaves": 28,
+    "min_child_samples": 10,
+    "subsample": 0.6902201497235311,
+    "colsample_bytree": 0.9844323216767631,
+    "reg_alpha": 0.5339517151578825,
+    "reg_lambda": 0.06627373786258443,
+    "recency_months": 6,
+    "recency_weight": 3.6913483659937114
+  },
+  "trial_number": 143,
+  "timestamp": "2026-02-02T18:25:18.853666"
+}
