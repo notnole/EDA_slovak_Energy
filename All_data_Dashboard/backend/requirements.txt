@@ -1,0 +1,9 @@
+fastapi
+uvicorn
+requests
+asyncpg
+greenlet
+sqlmodel
+playwright
+python-multipart
+websockets

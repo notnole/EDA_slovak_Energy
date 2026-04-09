@@ -1,0 +1,74 @@
+{
+  "training_setup": {
+    "stage1_training": "2024 (full year)",
+    "stage2_training": "H1 2025 (Jan-Jun) - OOF residuals",
+    "evaluation": "H2 2025 (Jul-Dec)"
+  },
+  "results": [
+    {
+      "horizon": 1,
+      "baseline_mae": 63.7892270531401,
+      "s1_mae": 40.02020569775842,
+      "s2_mae": 32.425612138586324,
+      "s1_improvement_pct": 37.26181120768358,
+      "s2_improvement_pct": 49.167573214872284,
+      "stage2_gain_pct": 18.976897861365764,
+      "direction_acc_pct": 83.5024154589372,
+      "n_train_s1": 8429,
+      "n_train_s2": 4325,
+      "n_test": 4140
+    },
+    {
+      "horizon": 2,
+      "baseline_mae": 63.89123188405797,
+      "s1_mae": 48.65610156610174,
+      "s2_mae": 44.69482043780962,
+      "s1_improvement_pct": 23.845416450262054,
+      "s2_improvement_pct": 30.045455190289122,
+      "stage2_gain_pct": 8.14138617930687,
+      "direction_acc_pct": 76.37681159420289,
+      "n_train_s1": 8428,
+      "n_train_s2": 4325,
+      "n_test": 4140
+    },
+    {
+      "horizon": 3,
+      "baseline_mae": 63.96420289855074,
+      "s1_mae": 54.02143881878342,
+      "s2_mae": 52.230558615871374,
+      "s1_improvement_pct": 15.544263242890487,
+      "s2_improvement_pct": 18.344079580401086,
+      "stage2_gain_pct": 3.3151286638617905,
+      "direction_acc_pct": 71.30434782608695,
+      "n_train_s1": 8427,
+      "n_train_s2": 4325,
+      "n_test": 4140
+    },
+    {
+      "horizon": 4,
+      "baseline_mae": 64.0925845410628,
+      "s1_mae": 57.85661975668192,
+      "s2_mae": 57.00375701379818,
+      "s1_improvement_pct": 9.729619782122576,
+      "s2_improvement_pct": 11.060292821742834,
+      "stage2_gain_pct": 1.474097080801624,
+      "direction_acc_pct": 66.01449275362319,
+      "n_train_s1": 8427,
+      "n_train_s2": 4325,
+      "n_test": 4140
+    },
+    {
+      "horizon": 5,
+      "baseline_mae": 64.23830917874396,
+      "s1_mae": 60.154170724444185,
+      "s2_mae": 60.19335760730812,
+      "s1_improvement_pct": 6.357792579713774,
+      "s2_improvement_pct": 6.296790222452316,
+      "stage2_gain_pct": -0.06514408293224715,
+      "direction_acc_pct": 62.9951690821256,
+      "n_train_s1": 8427,
+      "n_train_s2": 4325,
+      "n_test": 4140
+    }
+  ]
+}

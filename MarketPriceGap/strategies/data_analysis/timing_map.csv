@@ -1,0 +1,14 @@
+signal,availability,source,resolution,coverage,use_for,notes
+DA price forecast (SK Forecast1),D-1 before 10:00,da_price_forecasts_15min.csv,15min (aggregate to hourly),Sep 2025 - Feb 2026,"BESS scheduling, spread prediction","Best DA forecast: r=0.80, MAE=18.1 EUR/MWh"
+Load forecast (DAMAS),D-1 before 10:00,load_data.csv,hourly,Jan 2024 - Jan 2026,"Load surprise feature, spread direction",MAE ~62 MW. Load surprise = actual - forecast
+Temperature forecast (GFS),D-1 before 06:00,temperature_15min.csv,15min,Sep 2025 - Feb 2026,"Load proxy, seasonal adjustment",Load sensitivity: -31.5 MW/C
+DA auction result (actual DA price),D-1 at 12:30,hourly_market_prices.csv,hourly,Jan 2024 - Jan 2026,"BESS scheduling, spread baseline",Known before delivery day starts
+DA demand/supply/net_import,D-1 at 12:30,hourly_market_prices.csv,hourly,Jan 2024 - Jan 2026,Market balance indicator,Published with DA auction results
+Yesterday DA prices (all 24h),D-1 (known since D-2 12:30),hourly_market_prices.csv,hourly,Jan 2024 - Jan 2026,Persistence/momentum features,"Lagged DA prices, shapes, volatility"
+Yesterday IDM VWAP (all 24h),D-0 early morning,hourly_market_prices.csv + idm_60min.csv,hourly,Jan 2025 - Jan 2026,"IDM trend, spread persistence",IDM trades close ~30min before delivery
+Yesterday Imbalance price,D+1 at 10:00 (2-day lag),hourly_market_prices.csv,hourly,Dec 2024 - Dec 2025,Imbalance trend (with 2-day lag!),OKTE publishes next business day. NOT available for same-day trading
+Production by type (actual),D+0 with ~2h delay,da_master_hourly.csv (from ProductionPerType.csv),hourly,Jan 2024 - Feb 2026,"Solar/wind surprise, generation mix","Nuclear, solar, hydro, gas, etc. Solar forecast also available D-1"
+Solar forecast,D-1 before 10:00,da_master_hourly.csv (sk_f_solar),hourly,Mid 2025 - Feb 2026 (57.6% missing overall),Solar generation expectation,Available for D-1 scheduling decisions
+"Cross-border flows (CZ, PL, HU)",D+0 with ~2h delay,da_master_hourly.csv,hourly,Jan 2024 - Feb 2026,Import/export balance indicator,"net_flow_cz, net_flow_pl, net_flow_hu"
+"Indicator signals (spread_signal, confidence)",D-1 at 12:30 (computed from DA),indicator_signals.csv,hourly,Jan 2024 - Feb 2026,Existing BESS scheduling signal,"spread_signal, spread_confidence, trade_flag, rank_predicted"
+IDM live (15-min granularity),Continuous during delivery day,idm_15min.csv,15min,Jan 2025 - Jan 2026,"Live spread monitoring, strategy adjustment",Could be used for intraday BESS re-optimization

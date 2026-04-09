@@ -1,0 +1,5 @@
+period,strategy,opt_bid,rev_per_mwh
+2025 Mar-Aug,Hybrid curtail top-50%,58,62.2
+2025 Mar-Aug,Pure DA,0,50.8
+2025 Mar-Aug,DA or nothing,0,53.1
+2026 Feb-Mar,Pure DA,0,96.3

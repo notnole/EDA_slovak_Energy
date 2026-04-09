@@ -49,6 +49,9 @@ Adding more features **hurt** performance:
 | [error_correlation/](error_correlation/summary.md) | Error persistence patterns | 13_error_autocorrelation.png |
 | [horizon_24h/](horizon_24h/summary.md) | 24-hour ahead prediction | 20_24h_horizon_models.png |
 | [dayahead_model/](dayahead_model/summary.md) | Model development and optimization | 27_final_model.png |
+| [nowcast_5h/](nowcast_5h/summary.md) | **Two-stage load nowcasting (H+1 to H+5)** | Q3 H+1: 89% improvement over DAMAS |
+| [load_error_analysis_2025/](load_error_analysis_2025/summary.md) | H2 2025 evaluation of two-stage model | H+1: 49.2% improvement (32.4 MW) |
+| [temperature_analysis/](temperature_analysis/summary.md) | GFS temp forecast vs load/price | r = -0.40 temp-load, MAE = 1.1 C |
 
 ### Prophet Decomposition Key Finding
 Holidays cause **massive load drops** (200-715 MW, or 7-24% of average):
@@ -85,4 +88,6 @@ See `dayahead_model/final_dayahead_model.py` for clean implementation.
 
 ## Related Analysis
 - Price Analysis: `features/DamasPrices/`
+- Load Data: `features/DamasLoad/`
 - Raw Data: `RawData/Damas/`
+- Temperature Data: `RawData/Tampretures.csv` (GFS forecast + actual)

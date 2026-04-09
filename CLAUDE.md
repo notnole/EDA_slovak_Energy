@@ -93,6 +93,8 @@ Common prefixes to use:
 - European decimal format in source files (comma separator)
 - Date formats: Slovak (D.M.YYYY) and English (M/D/YYYY)
 - Outlier threshold: |value| > 300 MW removed as data errors
+- **CRITICAL: Imbalance price columns**: Use `imb_settlement_price` (NOT `imb_price`) for all trading P&L calculations. `imb_settlement_price` is what a market participant actually pays/receives. `imb_price` is the marginal system price which understates costs in deficit hours.
+- 2026 OKTE imbalance files have English headers (vs Slovak in 2024-2025). Pipeline handles both.
 
 ## Workstreams
 
@@ -116,7 +118,25 @@ Nowcasting models for Slovak electricity system imbalance. Predicts 15-minute se
 ### Workstream 2: Load Prediction Analysis
 **Location**: `LoadAnalysis/`, `features/DamasLoad/`
 
-Day-ahead load forecasting for Slovakia grid. DAMAS forecast baseline (MAE ~68 MW, MAPE ~2.3%).
+Day-ahead load forecasting and intraday nowcasting for Slovakia grid.
+- Day-ahead model: +2.9% over DAMAS baseline (62.4 vs 64.2 MW MAE)
+- 5h nowcast (two-stage): Q3 H+1 achieves 89% improvement (8.7 vs 83.4 MW MAE)
+- Temperature analysis: GFS forecast, load sensitivity -31.5 MW/C
+
+### Workstream 3: Market Price Gap
+**Location**: `MarketPriceGap/`
+
+DA/IDM/Imbalance price analysis and trading indicators for Slovak electricity market.
+- BESS scheduling indicator: 192,322 EUR revenue, 78% capture rate (2 cycles/day)
+- Speculative DA-IDM spread trading: 70,161 EUR, best rule 68% accuracy
+- DA price forecasts: r=0.80, MAE=18.1 EUR/MWh (corrected Feb 2026)
+
+### Workstream 4: Imbalance Forecasting
+**Location**: `ImbalanceForecasting/`
+
+Hourly-scale imbalance direction forecasting from load surprise signal.
+- Load surprise explains ~10% of imbalance variance (r = -0.30)
+- Structural IDM-Imbalance spread of +20 EUR/MWh beats any prediction-based filter
 
 ## Data Pipeline
 
@@ -133,6 +153,27 @@ ImbalanceNowcasting/     -> Analysis and models
 ```
 
 **Timing convention**: Feature timestamps = period START (observation available at START + 3min).
+
+### Live Database (beam-solar)
+
+PostgreSQL on `127.0.0.1:5434`, database `beam-solar`. Runs the live nowcasting pipeline.
+Full schema documented in `data/beam_database_README.md`.
+
+Key tables:
+- `beam.predictions` — live model + baseline predictions (per observation, per lead time)
+- `beam.immediate_data` — 3-min SCADA snapshots feeding the model
+- `data.full_prediction_dataset` — historical joined feature matrix (94k rows)
+- `data2.*` — raw SCADA time-series signals from Ipesoft EDA
+
+### Ipesoft Predictions
+
+Ipesoft EDA's native imbalance prediction signal (`P.DaE.Integrovana_Odchylka_Final_15min_Zn`).
+Cleaned data in `data/ipesoft_predictions/`. Values are in MW (divide by 4 for MWh).
+Essentially identical to the regulation baseline formula.
+
+## Commit Policy
+
+**Always commit new analyses.** Any new analysis folders, scripts, data files, or summaries created during a session MUST be committed before the session ends. Lost work from uncommitted changes is unacceptable. When in doubt, commit.
 
 ## Quick Start
 
