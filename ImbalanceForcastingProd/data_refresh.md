@@ -4,27 +4,23 @@ Target: extend all data sources to **April 9, 2026** for out-of-sample testing o
 
 ## Priority 1: Core SCADA + Labels (73--74 days missing)
 
-- [ ] **Regulation SCADA** — `data/features/regulation_3min.csv`
-  - Current end: 2026-01-25
-  - Missing: 2026-01-25 to 2026-04-09 (73 days)
-  - Source: Ipesoft EDA database (`data2.*` tables on beam-solar)
+- [x] **Regulation SCADA** — `data/features/regulation_3min.csv`
+  - Done: 390,351 rows, 2024-01-01 to 2026-04-08
+  - Script: `data/features/clean_features.py` (reads 3MIN_REG.csv + Reg3Min26.csv)
 
-- [ ] **Load SCADA** — `data/features/load_3min.csv`
-  - Current end: 2026-01-25
-  - Missing: 2026-01-25 to 2026-04-09 (73 days)
-  - Source: Ipesoft EDA database
+- [x] **Load SCADA** — `data/features/load_3min.csv`
+  - Done: 382,573 rows, 2024-01-01 to 2026-04-08
+  - Script: `data/features/clean_features.py` (reads 3MIN_Load.csv + Load3Min26.csv)
 
-- [ ] **Production SCADA** — `data/features/production_3min.csv`
-  - Current end: 2026-01-25
-  - Missing: 2026-01-25 to 2026-04-09 (73 days)
-  - Source: Ipesoft EDA database
+- [x] **Production SCADA** — `data/features/production_3min.csv`
+  - Done: 80,396 rows, 2025-10-08 to 2026-04-08
+  - Script: `data/features/clean_features.py` (reads 3MIN_Prod.csv + Prod3Min26.csv)
 
-- [ ] **Export/Import SCADA** — `data/features/export_import_3min.csv`
-  - Current end: 2026-01-25
-  - Missing: 2026-01-25 to 2026-04-09 (73 days)
-  - Source: Ipesoft EDA database
+- [x] **Export/Import SCADA** — `data/features/export_import_3min.csv`
+  - Done: 98,078 rows, 2025-10-08 to 2026-04-08
+  - Script: `data/features/clean_features.py` (reads 3MIN_ACK_REAL_BALNCE.csv + ackRealBalance3Min26.csv)
 
-- [ ] **Imbalance Labels (OKTE)** — `data/master/master_imbalance_data.csv`
+- [in individual files] **Imbalance Labels (OKTE)** — `data/master/master_imbalance_data.csv`
   - Current end: 2026-01-24
   - Missing: 2026-01-24 to 2026-04-09 (74 days)
   - Source: OKTE monthly SystemImbalance/OdchylkaSustavy CSVs -> `OKTE_Imbalnce/`
@@ -32,43 +28,43 @@ Target: extend all data sources to **April 9, 2026** for out-of-sample testing o
 
 ## Priority 2: Hourly Features (67--70 days missing)
 
-- [ ] **DAMAS Load (forecast + actual)** — `features/DamasLoad/load_data.csv`
+- [ii] **DAMAS Load (forecast + actual)** — `features/DamasLoad/load_data.csv`
   - Current end: 2026-01-31
   - Missing: 2026-01-31 to 2026-04-09 (67 days)
   - Source: DAMAS CSV exports (`RawData/Damas/`)
 
-- [ ] **DA Prices & Cross-Border Flows** — `features/DamasPrices/data/da_prices.csv`
+- [i] **DA Prices & Cross-Border Flows** — `features/DamasPrices/data/da_prices.csv`
   - Current end: 2026-01-28
   - Missing: 2026-01-28 to 2026-04-09 (70 days)
   - Source: DA market results (`RawData/DA_market/`)
 
-- [ ] **Solar (actual + DA forecast)** — `data/clean/solar/solar_hourly.csv`
+- [this is in the general producion folder in damas] **Solar (actual + DA forecast)** — `data/clean/solar/solar_hourly.csv`
   - Current end: 2026-01-31
   - Missing: 2026-01-31 to 2026-04-09 (67 days)
   - Source: DAMAS production per type / solar generation data
 
 ## Priority 3: Market Prices (33 days missing)
 
-- [ ] **Hourly Market Prices (DA/IDM/Imbalance)** — `MarketPriceGap/data/processed/hourly_market_prices.csv`
+- [these were alredy requested] **Hourly Market Prices (DA/IDM/Imbalance)** — `MarketPriceGap/data/processed/hourly_market_prices.csv`
   - Current end: 2026-03-06
   - Missing: 2026-03-06 to 2026-04-09 (33 days)
   - Source: IDM data (`RawData/IDM_MarketData/`), DA market, OKTE settlement prices
 
 ## Priority 4: Weather (5--8 days missing)
 
-- [ ] **Bardejov Weather Actual** — `data/Bardejov/Weather/bardejov_weather_actual.csv`
+- [cant be botherd] **Bardejov Weather Actual** — `data/Bardejov/Weather/bardejov_weather_actual.csv`
   - Current end: 2026-03-31
   - Missing: 2026-03-31 to 2026-04-09 (8 days)
   - Source: Open-Meteo API (historical weather for Bardejov)
 
-- [ ] **Bardejov DA Temp Forecast** — `data/Bardejov/Weather/bardejov_da_forecasts.csv`
+- [cant be botherd ] **Bardejov DA Temp Forecast** — `data/Bardejov/Weather/bardejov_da_forecasts.csv`
   - Current end: 2026-04-03
   - Missing: 2026-04-03 to 2026-04-09 (5 days)
   - Source: Open-Meteo API (GFS seamless D+1 forecast)
 
 ## Priority 5: Derived (regenerate after above are updated)
 
-- [ ] **Load Nowcast OOS Predictions** — `LoadAnalysis/nowcast_5h/tuning/oos_predictions/h2_oos_predictions.csv`
+- [ lets generet it properly OOF] **Load Nowcast OOS Predictions** — `LoadAnalysis/nowcast_5h/tuning/oos_predictions/h2_oos_predictions.csv`
   - Current end: 2026-01-31
   - Missing: 2026-01-31 to 2026-04-09 (67 days)
   - Action: Re-run `LoadAnalysis/nowcast_5h/tuning/generate_oos_predictions.py` after SCADA + DAMAS updated
