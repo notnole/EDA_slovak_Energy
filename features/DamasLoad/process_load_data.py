@@ -7,7 +7,11 @@ Baseline: Day-ahead forecast (Denná predikcia) - what we want to beat
 
 import pandas as pd
 import numpy as np
+import sys
 from pathlib import Path
+
+if sys.platform == "win32":
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
 
 def load_and_clean_excel(filepath: str, value_col_name: str) -> pd.DataFrame:
@@ -37,39 +41,23 @@ def main():
     print("Processing DAMAS Load Data")
     print("=" * 60)
 
-    # Load actual data (Skutočnosť = Reality)
+    # Load actual data (Skutočnosť = Reality) — glob all matching files
     print("\nLoading actual load data...")
-    actual_2024 = load_and_clean_excel(
-        raw_path / 'Zaťaženie ES SR - Skutočnosť (20260129 144136).xlsx',
-        'actual_load_mw'
-    )
-    actual_2025 = load_and_clean_excel(
-        raw_path / 'Zaťaženie ES SR - Skutočnosť (20260129 144044).xlsx',
-        'actual_load_mw'
-    )
-    actual_2026 = load_and_clean_excel(
-        raw_path / 'Zaťaženie ES SR - Skutočnosť (20260131 205018).xlsx',
-        'actual_load_mw'
-    )
+    actual_files = sorted(raw_path.glob('Zaťaženie ES SR - Skutočnosť*.xlsx'))
+    actual_dfs = []
+    for f in actual_files:
+        print(f"  {f.name}")
+        actual_dfs.append(load_and_clean_excel(f, 'actual_load_mw'))
+    actual = pd.concat(actual_dfs, ignore_index=True)
 
-    # Load forecast data (Denná predikcia = Daily prediction)
+    # Load forecast data (Denná predikcia = Daily prediction) — glob all
     print("Loading forecast data...")
-    forecast_2024 = load_and_clean_excel(
-        raw_path / 'Zaťaženie ES SR - Denná predikcia (20260129 144157).xlsx',
-        'forecast_load_mw'
-    )
-    forecast_2025 = load_and_clean_excel(
-        raw_path / 'Zaťaženie ES SR - Denná predikcia (20260129 144637).xlsx',
-        'forecast_load_mw'
-    )
-    forecast_2026 = load_and_clean_excel(
-        raw_path / 'Zaťaženie ES SR - Denná predikcia (20260131 205031).xlsx',
-        'forecast_load_mw'
-    )
-
-    # Combine years
-    actual = pd.concat([actual_2024, actual_2025, actual_2026], ignore_index=True)
-    forecast = pd.concat([forecast_2024, forecast_2025, forecast_2026], ignore_index=True)
+    forecast_files = sorted(raw_path.glob('Zaťaženie ES SR - Denná predikcia*.xlsx'))
+    forecast_dfs = []
+    for f in forecast_files:
+        print(f"  {f.name}")
+        forecast_dfs.append(load_and_clean_excel(f, 'forecast_load_mw'))
+    forecast = pd.concat(forecast_dfs, ignore_index=True)
 
     print(f"\nActual data: {actual['datetime'].min()} to {actual['datetime'].max()}")
     print(f"Forecast data: {forecast['datetime'].min()} to {forecast['datetime'].max()}")

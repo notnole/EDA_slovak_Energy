@@ -10,9 +10,9 @@ import warnings
 warnings.filterwarnings('ignore')
 
 # Paths
-BASE_DIR = Path(__file__).parent.parent
-IMBALANCE_DIR = BASE_DIR / "OKTE_Imbalnce"
-OUTPUT_DIR = BASE_DIR / "data" / "master"
+REPO_ROOT = Path(__file__).resolve().parent.parent.parent
+IMBALANCE_DIR = REPO_ROOT / "OKTE_Imbalnce"
+OUTPUT_DIR = Path(__file__).resolve().parent
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
 # Column mapping from Slovak to English

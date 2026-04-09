@@ -25,6 +25,8 @@ FILES = {
     2025: RAW_PATH / 'Celkove_vysledky_DT_01-01-2025_31-12-2025.csv',
     2026: RAW_PATH / 'Celkove_vysledky_DT_01-01-2026_28-01-2026.csv',
 }
+# Also check DA_market folder for newer English-format files
+DA_MARKET_PATH = BASE_PATH / 'RawData' / 'DA_market'
 
 
 def parse_price(value):
@@ -33,17 +35,33 @@ def parse_price(value):
         return np.nan
     if isinstance(value, (int, float)):
         return float(value)
-    # Handle European format: "0,10" -> 0.10
-    return float(str(value).replace(',', '.'))
+    s = str(value).strip()
+    if s == '':
+        return np.nan
+    dots = s.count('.')
+    commas = s.count(',')
+    if dots > 1:
+        # Multiple dots = thousand separator (e.g. 1.123.7 -> 1123.7)
+        # Last dot is decimal
+        parts = s.rsplit('.', 1)
+        s = parts[0].replace('.', '') + '.' + parts[1]
+    elif dots == 1 and commas == 1:
+        if s.rfind('.') > s.rfind(','):
+            s = s.replace(',', '')
+        else:
+            s = s.replace('.', '').replace(',', '.')
+    elif commas == 1:
+        s = s.replace(',', '.')
+    return float(s)
 
 
 def parse_flow(value):
-    """Parse flow value."""
+    """Parse flow value, handling European format."""
     if pd.isna(value):
         return 0.0
     if isinstance(value, (int, float)):
         return float(value)
-    return float(str(value).replace(',', '.'))
+    return parse_price(value) or 0.0
 
 
 def load_file(filepath: Path, year: int) -> pd.DataFrame:
@@ -58,6 +76,7 @@ def load_file(filepath: Path, year: int) -> pd.DataFrame:
 
     # Rename columns to English
     column_map = {
+        # Slovak headers
         'Obchodný deň': 'date',
         'Číslo periódy': 'period_num',
         'Perióda': 'period',
@@ -72,6 +91,21 @@ def load_file(filepath: Path, year: int) -> pd.DataFrame:
         'Tok HU ➝ SK (MW)': 'flow_hu_to_sk',
         'Tok SK ➝ HU (MW)': 'flow_sk_to_hu',
         'Stav zverejnenia': 'status',
+        # English headers (2026 OKTE format)
+        'Delivery day': 'date',
+        'Period number': 'period_num',
+        'Period': 'period',
+        'Period (min)': 'period_min',
+        'Price SK (EUR/MWh)': 'price_eur_mwh',
+        'Demand successful (MW)': 'demand_mw',
+        'Supply successful (MW)': 'supply_mw',
+        'Flow CZ ➝ SK (MW)': 'flow_cz_to_sk',
+        'Flow SK ➝ CZ (MW)': 'flow_sk_to_cz',
+        'Flow PL ➝ SK (MW)': 'flow_pl_to_sk',
+        'Flow SK ➝ PL (MW)': 'flow_sk_to_pl',
+        'Flow HU ➝ SK (MW)': 'flow_hu_to_sk',
+        'Flow SK ➝ HU (MW)': 'flow_sk_to_hu',
+        'Publication status': 'status',
     }
     df = df.rename(columns=column_map)
 
@@ -216,6 +250,14 @@ def main():
             dfs.append(df)
         else:
             print(f"  WARNING: File not found for {year}")
+
+    # Also load English-format DA market files (Total_results_DAM_*)
+    if DA_MARKET_PATH.exists():
+        for f in sorted(DA_MARKET_PATH.glob("Total_results_DAM_*.csv")):
+            print(f"\n  Loading English DA file: {f.name}")
+            df = load_file(f, 2026)
+            df = aggregate_to_hourly(df)
+            dfs.append(df)
 
     # Combine all years
     print("\nCombining all years...")

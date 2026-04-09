@@ -28,17 +28,10 @@ if sys.platform == "win32":
 BASE_DIR = Path(__file__).parent.parent.parent.parent
 
 # --- Source files (ordered: 2024, 2025, Jan 2026) ---
-FORECAST_FILES = [
-    BASE_DIR / "RawData" / "Damas" / "V\u00fdroba FVE a Vetern\u00fdch - Predikcia (20260201 213840).xlsx",  # 2024
-    BASE_DIR / "RawData" / "Damas" / "V\u00fdroba FVE a Vetern\u00fdch - Predikcia (20260201 213746).xlsx",  # 2025
-    BASE_DIR / "RawData" / "Damas" / "V\u00fdroba FVE a Vetern\u00fdch - Predikcia (20260201 213657).xlsx",  # Jan 2026
-]
-
-ACTUAL_FILES = [
-    BASE_DIR / "RawData" / "Damas" / "V\u00fdroba ES SR - Skuto\u010dnos\u0165 (20260201 213941).xlsx",  # 2024
-    BASE_DIR / "RawData" / "Damas" / "V\u00fdroba ES SR - Skuto\u010dnos\u0165 (20260201 214046).xlsx",  # 2025
-    BASE_DIR / "RawData" / "Damas" / "V\u00fdroba ES SR - Skuto\u010dnos\u0165 (20260201 214114).xlsx",  # Jan 2026
-]
+# Auto-discover all matching files (covers all years)
+DAMAS_DIR = BASE_DIR / "RawData" / "Damas"
+FORECAST_FILES = sorted(DAMAS_DIR.glob("V\u00fdroba FVE a Vetern\u00fdch - Predikcia*.xlsx"))
+ACTUAL_FILES = sorted(DAMAS_DIR.glob("V\u00fdroba ES SR - Skuto\u010dnos\u0165*.xlsx"))
 
 OUTPUT_PATH = Path(__file__).parent / "solar_hourly.csv"
 
