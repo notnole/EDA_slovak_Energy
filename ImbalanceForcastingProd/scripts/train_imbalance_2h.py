@@ -38,9 +38,9 @@ warnings.filterwarnings('ignore')
 SCRIPT_DIR = Path(__file__).resolve().parent
 BASE_DIR = SCRIPT_DIR.parent
 DATA_DIR = BASE_DIR / "data"
-PLOT_DIR = BASE_DIR / "plots_v2"
-MODEL_DIR = BASE_DIR / "models_v2"
-REPO_ROOT = SCRIPT_DIR.parents[2]
+PLOT_DIR = BASE_DIR / "plots"
+MODEL_DIR = BASE_DIR / "models"
+REPO_ROOT = SCRIPT_DIR.parents[1]  # ImbalanceForcastingProd is top-level
 
 for d in [DATA_DIR, PLOT_DIR, MODEL_DIR]:
     d.mkdir(parents=True, exist_ok=True)
