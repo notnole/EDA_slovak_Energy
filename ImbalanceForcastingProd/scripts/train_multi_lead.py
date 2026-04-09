@@ -208,16 +208,20 @@ def build_features(data, lead):
     train_mask = df.index <= TRAIN_END
     test_mask = df.index > TRAIN_END
 
-    # Hourly data shift = lead + 4 (1h publication delay)
+    # SCADA shift = lead + 1: the 15-min period at T covers [T, T+15min)
+    # and is only complete at T+15min. So at prediction time T-lead*15min,
+    # the last COMPLETE period ended 1 period earlier.
+    scada_shift = lead + 1
+    # Hourly data shift = lead + 4 (1h publication delay on top of lead)
     hourly_shift = lead + 4
 
     features = {}
 
     # --- PROXY (lags + derived) ---
-    for lag in range(lead, lead + 16):
+    for lag in range(scada_shift, scada_shift + 16):
         features[f'proxy_lag{lag}'] = df['proxy'].shift(lag)
 
-    proxy_s = df['proxy'].shift(lead)
+    proxy_s = df['proxy'].shift(scada_shift)
     for w in [4, 8, 16, 32]:
         features[f'proxy_rmean{w}'] = proxy_s.rolling(w).mean()
     for w in [4, 8]:
@@ -226,16 +230,16 @@ def build_features(data, lead):
     features['proxy_rmax4'] = proxy_s.rolling(4).max()
     features['proxy_range4'] = features['proxy_rmax4'] - features['proxy_rmin4']
 
-    features['proxy_momentum'] = features[f'proxy_lag{lead}'] - features[f'proxy_lag{lead+1}']
-    features['proxy_momentum4'] = features[f'proxy_lag{lead}'] - features[f'proxy_lag{lead+4}']
+    features['proxy_momentum'] = features[f'proxy_lag{scada_shift}'] - features[f'proxy_lag{scada_shift+1}']
+    features['proxy_momentum4'] = features[f'proxy_lag{scada_shift}'] - features[f'proxy_lag{scada_shift+4}']
     features['proxy_acceleration'] = features['proxy_momentum'] - (
-        features[f'proxy_lag{lead+1}'] - features[f'proxy_lag{lead+2}'])
+        features[f'proxy_lag{scada_shift+1}'] - features[f'proxy_lag{scada_shift+2}'])
 
-    features['proxy_lag_pos'] = features[f'proxy_lag{lead}'].clip(lower=0)
-    features['proxy_lag_neg'] = features[f'proxy_lag{lead}'].clip(upper=0)
+    features['proxy_lag_pos'] = features[f'proxy_lag{scada_shift}'].clip(lower=0)
+    features['proxy_lag_neg'] = features[f'proxy_lag{scada_shift}'].clip(upper=0)
 
     for w in [4, 8, 16]:
-        pos_count = sum((df['proxy'].shift(lead + i) > 0).astype(float) for i in range(w))
+        pos_count = sum((df['proxy'].shift(scada_shift + i) > 0).astype(float) for i in range(w))
         features[f'proxy_pos_ratio_{w}'] = pos_count / w
 
     features['proxy_yesterday'] = df['proxy'].shift(96)
@@ -255,26 +259,26 @@ def build_features(data, lead):
     features['proxy_ewm4'] = proxy_s.ewm(span=4).mean()
     features['proxy_range8'] = proxy_s.rolling(8).max() - proxy_s.rolling(8).min()
     features['proxy_zero_cross4'] = sum(
-        (np.sign(df['proxy'].shift(lead + i)) != np.sign(df['proxy'].shift(lead + i + 1))).astype(float)
+        (np.sign(df['proxy'].shift(scada_shift + i)) != np.sign(df['proxy'].shift(scada_shift + i + 1))).astype(float)
         for i in range(4))
     features['proxy_abs_rmean4'] = proxy_s.abs().rolling(4).mean()
     features['proxy_abs_rmean8'] = proxy_s.abs().rolling(8).mean()
-    features['proxy_lag96_diff'] = features[f'proxy_lag{lead}'] - df['proxy'].shift(96)
+    features['proxy_lag96_diff'] = features[f'proxy_lag{scada_shift}'] - df['proxy'].shift(96)
 
     # --- REGULATION ---
-    reg_s = df['reg_mean'].shift(lead)
+    reg_s = df['reg_mean'].shift(scada_shift)
     features['reg_rmean4'] = reg_s.rolling(4).mean()
     features['reg_rmean8'] = reg_s.rolling(8).mean()
     features['reg_rstd8'] = reg_s.rolling(8).std()
-    features['reg_momentum'] = df['reg_mean'].shift(lead) - df['reg_mean'].shift(lead + 1)
-    features['reg_vol_rmean4'] = df['reg_std'].shift(lead).rolling(4).mean()
+    features['reg_momentum'] = df['reg_mean'].shift(scada_shift) - df['reg_mean'].shift(scada_shift + 1)
+    features['reg_vol_rmean4'] = df['reg_std'].shift(scada_shift).rolling(4).mean()
 
     # --- LOAD ---
-    load_s = df['load_mean'].shift(lead)
+    load_s = df['load_mean'].shift(scada_shift)
     features['load_rmean4'] = load_s.rolling(4).mean()
     features['load_rmean8'] = load_s.rolling(8).mean()
     features['load_rmean16'] = load_s.rolling(16).mean()
-    features['load_momentum'] = df['load_mean'].shift(lead) - df['load_mean'].shift(lead + 4)
+    features['load_momentum'] = df['load_mean'].shift(scada_shift) - df['load_mean'].shift(scada_shift + 4)
 
     load_train = load_s[train_mask]
     frozen_load_mean = load_train.groupby(df.loc[train_mask, 'hour_qh']).mean()
@@ -286,24 +290,24 @@ def build_features(data, lead):
     features['load_deviation'] = load_s - load_baseline
 
     features['load_rstd4'] = load_s.rolling(4).std()
-    load_max_s = df['load_max'].shift(lead) if 'load_max' in df.columns else load_s
-    load_min_s = df['load_min'].shift(lead) if 'load_min' in df.columns else load_s
+    load_max_s = df['load_max'].shift(scada_shift) if 'load_max' in df.columns else load_s
+    load_min_s = df['load_min'].shift(scada_shift) if 'load_min' in df.columns else load_s
     features['load_ramp4'] = load_max_s.rolling(4).max() - load_min_s.rolling(4).min()
     features['load_yesterday'] = df['load_mean'].shift(96)
 
     # --- PRODUCTION ---
     if 'prod_mean' in df.columns:
-        prod_s = df['prod_mean'].shift(lead)
+        prod_s = df['prod_mean'].shift(scada_shift)
         features['prod_rmean4'] = prod_s.rolling(4).mean()
         features['prod_rmean8'] = prod_s.rolling(8).mean()
-        features['prod_momentum'] = df['prod_mean'].shift(lead) - df['prod_mean'].shift(lead + 4)
+        features['prod_momentum'] = df['prod_mean'].shift(scada_shift) - df['prod_mean'].shift(scada_shift + 4)
         prod_train = prod_s[train_mask].dropna()
         if len(prod_train) > 96:
             frozen_prod = prod_train.groupby(df.loc[prod_train.index, 'hour_qh']).mean()
             features['prod_deviation'] = prod_s - df['hour_qh'].map(frozen_prod)
         else:
             features['prod_deviation'] = pd.Series(np.nan, index=df.index)
-        features['prod_vol'] = (df['prod_std'].shift(lead).rolling(4).mean()
+        features['prod_vol'] = (df['prod_std'].shift(scada_shift).rolling(4).mean()
                                 if 'prod_std' in df.columns else pd.Series(np.nan, index=df.index))
     else:
         for f in ['prod_rmean4', 'prod_rmean8', 'prod_momentum', 'prod_deviation', 'prod_vol']:
@@ -311,17 +315,17 @@ def build_features(data, lead):
 
     # --- EXPORT/IMPORT ---
     if 'xborder_mean' in df.columns:
-        xb_s = df['xborder_mean'].shift(lead)
+        xb_s = df['xborder_mean'].shift(scada_shift)
         features['xborder_rmean4'] = xb_s.rolling(4).mean()
         features['xborder_rmean8'] = xb_s.rolling(8).mean()
-        features['xborder_momentum'] = df['xborder_mean'].shift(lead) - df['xborder_mean'].shift(lead + 4)
+        features['xborder_momentum'] = df['xborder_mean'].shift(scada_shift) - df['xborder_mean'].shift(scada_shift + 4)
         xb_train = xb_s[train_mask].dropna()
         if len(xb_train) > 96:
             frozen_xb = xb_train.groupby(df.loc[xb_train.index, 'hour_qh']).mean()
             features['xborder_deviation'] = xb_s - df['hour_qh'].map(frozen_xb)
         else:
             features['xborder_deviation'] = pd.Series(np.nan, index=df.index)
-        features['xborder_vol'] = (df['xborder_std'].shift(lead).rolling(4).mean()
+        features['xborder_vol'] = (df['xborder_std'].shift(scada_shift).rolling(4).mean()
                                    if 'xborder_std' in df.columns else pd.Series(np.nan, index=df.index))
     else:
         for f in ['xborder_rmean4', 'xborder_rmean8', 'xborder_momentum', 'xborder_deviation', 'xborder_vol']:
@@ -433,7 +437,7 @@ def build_features(data, lead):
     feature_cols = list(feat_df.columns)
     feat_df['target'] = df['imbalance_mwh']
 
-    core_cols = [f'proxy_lag{lead}', 'proxy_rmean4', 'load_rmean4', 'hour_sin', 'target']
+    core_cols = [f'proxy_lag{scada_shift}', 'proxy_rmean4', 'load_rmean4', 'hour_sin', 'target']
     valid = feat_df.dropna(subset=core_cols)
 
     return valid, feature_cols
