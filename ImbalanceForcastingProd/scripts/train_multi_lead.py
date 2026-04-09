@@ -48,8 +48,8 @@ plt.rcParams.update({
 
 LEADS = [8, 7, 6, 5, 4]  # 2h, 1h45, 1h30, 1h15, 1h
 QUANTILES = [0.10, 0.50, 0.90]  # Fewer quantiles for speed (5 leads x 3 = 15 models)
-TRAIN_END = '2025-09-30'
-TEST_START = '2025-10-01'
+TRAIN_END = '2026-01-31'
+TEST_START = '2026-02-01'
 
 
 # ============================================================
