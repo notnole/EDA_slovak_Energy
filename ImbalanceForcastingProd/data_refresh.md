@@ -48,13 +48,13 @@ Target: extend all data sources to **April 9, 2026** for out-of-sample testing o
 
 ## Priority 4: Weather
 
-- [ ] **Bardejov Weather Actual** — `data/Bardejov/Weather/bardejov_weather_actual.csv`
-  - Current end: 2026-03-31 (8 days short)
-  - Source: Open-Meteo API — not critical, model will use NaN for missing days
+- [x] **Bardejov Weather Actual** — `data/Bardejov/Weather/bardejov_weather_actual.csv`
+  - Done: 19,920 rows, 2024-01-01 to 2026-04-09
+  - Source: Open-Meteo archive API (free tier, Bardejov 49.29N 21.27E)
 
-- [ ] **Bardejov DA Temp Forecast** — `data/Bardejov/Weather/bardejov_da_forecasts.csv`
-  - Current end: 2026-04-03 (5 days short)
-  - Source: Open-Meteo API — not critical
+- [x] **Bardejov DA Temp Forecast** — `data/Bardejov/Weather/bardejov_da_forecasts.csv`
+  - Done: 44,136 rows, 2021-03-28 to 2026-04-09
+  - Source: Open-Meteo GFS API (free tier)
 
 ## Priority 5: Derived
 
