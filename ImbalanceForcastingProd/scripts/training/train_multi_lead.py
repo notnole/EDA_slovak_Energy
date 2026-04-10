@@ -537,6 +537,9 @@ def build_features(data, lead):
     feat_df = pd.DataFrame(features, index=df.index)
     feature_cols = list(feat_df.columns)
     feat_df['target'] = df['imbalance_mwh']
+    # Preserve settlement price for spread target computation downstream
+    if 'imb_settle_price' in df.columns:
+        feat_df['imb_settle_price'] = df['imb_settle_price']
 
     core_cols = [f'proxy_lag{scada_shift}', 'proxy_rmean4', 'load_rmean4', 'hour_sin', 'target']
     valid = feat_df.dropna(subset=core_cols)
