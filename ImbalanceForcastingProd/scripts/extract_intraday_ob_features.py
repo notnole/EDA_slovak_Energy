@@ -28,15 +28,18 @@ LIQUID_SPREAD_THRESHOLD = 15.0
 
 
 def pull_month(conn, month_start, month_end):
-    """Pull one month of QH snapshots, pre-grouped in SQL."""
+    """Pull one month of QH snapshots — NO GROUP BY, pivot in pandas.
+
+    Following the BESS intra-trading pattern: raw SELECT + ORDER BY is
+    10-100x faster than GROUP BY with CASE pivots. The DB does a simple
+    index scan, pandas does the pivot in-memory.
+    """
     query = """
-        SELECT tradeday, periodfrom, lastupdate,
-               MAX(CASE WHEN tradetype = 'N' THEN price END) as bid,
-               MAX(CASE WHEN tradetype = 'P' THEN price END) as ask
+        SELECT tradeday, periodfrom, lastupdate, tradetype, price
         FROM db_ems.vdt_isot_knihaobjednavok_best
         WHERE tradeday >= %s AND tradeday < %s
           AND deliverydur = 15 AND id_depth = 1
-        GROUP BY tradeday, periodfrom, lastupdate
+        ORDER BY tradeday, lastupdate, periodfrom
     """
     cur = conn.cursor()
     cur.execute(query, (month_start, month_end))
@@ -46,11 +49,21 @@ def pull_month(conn, month_start, month_end):
     if not rows:
         return pd.DataFrame()
 
-    df = pd.DataFrame(rows, columns=['tradeday', 'periodfrom', 'lastupdate', 'bid', 'ask'])
-    df['bid'] = df['bid'].astype(float)
-    df['ask'] = df['ask'].astype(float)
-    df['tradeday'] = pd.to_datetime(df['tradeday'])
-    df['lastupdate'] = pd.to_datetime(df['lastupdate'])
+    df_raw = pd.DataFrame(rows, columns=['tradeday', 'periodfrom', 'lastupdate', 'tradetype', 'price'])
+    df_raw['price'] = df_raw['price'].astype(float)
+    df_raw['tradeday'] = pd.to_datetime(df_raw['tradeday'])
+    df_raw['lastupdate'] = pd.to_datetime(df_raw['lastupdate'])
+
+    # Pivot bid/ask in pandas (fast vectorized operation)
+    df = df_raw.pivot_table(
+        index=['tradeday', 'periodfrom', 'lastupdate'],
+        columns='tradetype',
+        values='price',
+        aggfunc='first'
+    ).reset_index()
+    df.columns.name = None
+    df = df.rename(columns={'N': 'bid', 'P': 'ask'})
+
     df['delivery_start'] = df['tradeday'] + pd.to_timedelta(df['periodfrom'] * 15, unit='m')
     df['minutes_before'] = (df['delivery_start'] - df['lastupdate']).dt.total_seconds() / 60
 
@@ -65,19 +78,95 @@ def pull_month(conn, month_start, month_end):
     return df
 
 
+def compute_pressure_by_timeslot(day_data, da_hourly, trade_day):
+    """Precompute market-wide pressure for each 15-min timeslot in one day.
+
+    Instead of recomputing for each delivery period (O(n^2)), compute once
+    per timeslot and broadcast. There are only ~96 timeslots per day.
+    Returns dict: timeslot_start -> pressure features.
+    """
+    trade_dt = pd.Timestamp(trade_day)
+    pressure_cache = {}
+
+    # Generate 15-min timeslots covering the trading day
+    for slot_idx in range(96):
+        slot_time = trade_dt + pd.Timedelta(minutes=slot_idx * 15)
+        window_start = slot_time - pd.Timedelta(minutes=15)
+
+        window = day_data[(day_data['lastupdate'] >= window_start) &
+                          (day_data['lastupdate'] <= slot_time)]
+        if len(window) == 0:
+            continue
+
+        bid_up = 0
+        bid_dn = 0
+        ask_dn = 0
+        ask_up = 0
+        da_spreads = []
+        act_spreads = []
+        n_act = 0
+
+        # Vectorized: get first and last per period in one pass
+        for p, grp in window.groupby('periodfrom'):
+            if len(grp) < 2:
+                continue
+            grp = grp.sort_values('lastupdate')
+            n_act += 1
+            f_bid, l_bid = grp['bid'].iloc[0], grp['bid'].iloc[-1]
+            f_ask, l_ask = grp['ask'].iloc[0], grp['ask'].iloc[-1]
+
+            if pd.notna(f_bid) and pd.notna(l_bid):
+                if l_bid > f_bid: bid_up += 1
+                elif l_bid < f_bid: bid_dn += 1
+            if pd.notna(f_ask) and pd.notna(l_ask):
+                if l_ask < f_ask: ask_dn += 1
+                elif l_ask > f_ask: ask_up += 1
+
+            l_mid = grp['mid'].iloc[-1]
+            p_hour = trade_dt + pd.Timedelta(hours=int(p) // 4)
+            da_p = da_hourly.get(p_hour, np.nan)
+            if pd.notna(l_mid) and pd.notna(da_p):
+                da_spreads.append(l_mid - da_p)
+            l_spread = grp['spread'].iloc[-1]
+            if pd.notna(l_spread) and l_spread > 0:
+                act_spreads.append(l_spread)
+
+        if n_act > 0:
+            pressure_cache[slot_time] = {
+                'ob_pct_bid_rising': bid_up / n_act,
+                'ob_pct_ask_falling': ask_dn / n_act,
+                'ob_net_pressure': (bid_up - bid_dn) / n_act,
+                'ob_n_active_periods': n_act,
+                'ob_mean_da_spread': np.mean(da_spreads) if da_spreads else np.nan,
+                'ob_mean_spread': np.mean(act_spreads) if act_spreads else np.nan,
+            }
+
+    return pressure_cache
+
+
 def process_month(df, da_hourly):
-    """Process all delivery periods from one month of data."""
+    """Process all delivery periods from one month of data.
+
+    Step 1: Precompute market pressure per (day, timeslot) — O(days * 96)
+    Step 2: Compute target features per (day, period) — O(periods)
+    Step 3: Join pressure onto target features by prediction_time timeslot
+    """
     if len(df) == 0:
         return pd.DataFrame()
 
-    results = []
+    # Step 1: Precompute pressure per day
+    pressure_by_day = {}
+    for trade_day, day_data in df.groupby('tradeday'):
+        pressure_by_day[trade_day] = compute_pressure_by_timeslot(
+            day_data, da_hourly, trade_day)
 
+    # Step 2: Target features per period
+    results = []
     for (trade_day, period), period_data in df.groupby(['tradeday', 'periodfrom']):
         period_data = period_data.sort_values('lastupdate')
         delivery_start = pd.Timestamp(trade_day) + pd.Timedelta(minutes=int(period) * 15)
         prediction_time = delivery_start - pd.Timedelta(minutes=120)
 
-        # Current state at T-120min
         at_pred = period_data[period_data['minutes_before'] >= 120]
         if len(at_pred) == 0:
             continue
@@ -113,46 +202,12 @@ def process_month(df, da_hourly):
             row['ob_target_ask_since_liquid'] = np.nan
             row['ob_target_time_liquid_min'] = 0.0
 
-        # Market-wide pressure: all periods with updates in 15min before prediction_time
-        same_day = df[df['tradeday'] == trade_day]
-        window = same_day[(same_day['lastupdate'] >= prediction_time - pd.Timedelta(minutes=15)) &
-                          (same_day['lastupdate'] <= prediction_time)]
-
-        if len(window) > 0:
-            bid_up = 0
-            bid_dn = 0
-            ask_up = 0
-            ask_dn = 0
-            da_spreads = []
-            act_spreads = []
-            n_act = 0
-
-            for p, grp in window.groupby('periodfrom'):
-                grp = grp.sort_values('lastupdate')
-                if len(grp) < 2:
-                    continue
-                n_act += 1
-                f, l = grp.iloc[0], grp.iloc[-1]
-                if pd.notna(f['bid']) and pd.notna(l['bid']):
-                    if l['bid'] > f['bid']: bid_up += 1
-                    elif l['bid'] < f['bid']: bid_dn += 1
-                if pd.notna(f['ask']) and pd.notna(l['ask']):
-                    if l['ask'] < f['ask']: ask_dn += 1
-                    elif l['ask'] > f['ask']: ask_up += 1
-                p_hour = pd.Timestamp(trade_day) + pd.Timedelta(hours=int(p) // 4)
-                da_p = da_hourly.get(p_hour, np.nan)
-                if pd.notna(l['mid']) and pd.notna(da_p):
-                    da_spreads.append(l['mid'] - da_p)
-                if pd.notna(l['spread']) and l['spread'] > 0:
-                    act_spreads.append(l['spread'])
-
-            if n_act > 0:
-                row['ob_pct_bid_rising'] = bid_up / n_act
-                row['ob_pct_ask_falling'] = ask_dn / n_act
-                row['ob_net_pressure'] = (bid_up - bid_dn) / n_act
-                row['ob_n_active_periods'] = n_act
-                row['ob_mean_da_spread'] = np.mean(da_spreads) if da_spreads else np.nan
-                row['ob_mean_spread'] = np.mean(act_spreads) if act_spreads else np.nan
+        # Step 3: Look up precomputed pressure for nearest timeslot
+        pred_slot = prediction_time.floor('15min')
+        day_pressure = pressure_by_day.get(trade_day, {})
+        pressure = day_pressure.get(pred_slot)
+        if pressure:
+            row.update(pressure)
 
         results.append(row)
 
