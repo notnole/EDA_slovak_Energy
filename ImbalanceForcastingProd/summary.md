@@ -1,184 +1,215 @@
-# 2-Hour-Ahead Imbalance Predictor
+# Imbalance Forecasting — Production System
 
 ## Overview
 
-LightGBM quantile regression model predicting Slovak system imbalance (MWh) for each 15-minute settlement period, **2 hours before delivery**. Outputs point prediction (median) plus P10/P25/P75/P90 confidence intervals.
+Trading system for the Slovak electricity market that predicts the IDM-to-settlement price spread and trades on the intraday (IDM) market 2 hours before delivery, settling at the imbalance settlement price.
 
-- **108 features** from 11 data sources
-- **Train**: Jan 2024 -- Sep 2025 (59,598 samples)
-- **Test**: Oct 2025 -- Jan 2026 (10,184 samples)
-- **Target**: System Imbalance (MWh) per 15-min settlement period
+**Core insight**: Instead of predicting system imbalance (MWh) and hoping it translates to profit, we predict the actual **price spread** between where we can trade (IDM) and where we'll settle (OKTE imbalance settlement price). This directly predicts P&L.
 
-## Model Performance (Test Set)
+## Architecture
 
-| Metric | V1 (55 features) | This model (108 features) |
-|--------|-------------------|---------------------------|
-| Direction accuracy | 61.0% | **66.1%** |
-| High confidence (\|pred\|>5 MWh) | ~65% | **80.9%** |
-| Very high confidence (\|pred\|>10 MWh) | ~70% | **90.4%** |
-| R-squared | 0.18 | **0.225** |
-| Correlation | ~0.43 | **0.478** |
-| MAE | ~5-6 MWh | 7.05 MWh |
+### 3-Stage Stacked Model
 
-### Direction Accuracy by Predicted Magnitude
+```
+Stage 1: Load Nowcast (H+2)
+    Input: 3-min SCADA (load, regulation), DAMAS load forecast
+    Output: OOF predicted load forecast error
+    Script: LoadAnalysis/nowcast_5h/tuning/generate_oos_predictions.py
 
-| Predicted Magnitude | Accuracy | Count |
-|---------------------|----------|-------|
-| 0--2 MWh | 55.8% | 3,775 |
-| 2--5 MWh | 66.0% | 3,687 |
-| 5--10 MWh | 78.5% | 2,083 |
-| 10--20 MWh | 90.3% | 507 |
-| >20 MWh | 93.3% | 15 |
+Stage 2: Imbalance Model (108 features, LightGBM MAE)
+    Input: SCADA, weather, DA prices, market spreads, Stage 1 OOF
+    Output: OOF imbalance direction + magnitude prediction
+    Script: scripts/training/train_multi_lead.py
 
-High-confidence predictions (>5 MWh) occur ~23 times per day and are correct on direction ~81% of the time.
+Stage 3: Spread Model (116 features, LightGBM MAE)
+    Input: All Stage 2 features + Stage 2 OOF imbalance prediction
+    Target: imb_settlement_price - IDM_mid_at_T_minus_120min
+    Output: Predicted spread = the trading signal
+    Script: scripts/training/train_stacked_model.py
+```
 
-## Feature Groups (108 total)
+Each stage produces walk-forward out-of-fold predictions to avoid leakage. Stage N's OOF from prior folds becomes a feature for Stage N+1's training.
 
-### Importance by Group
+### Execution
 
-| Group | Features | Importance | Key Features |
-|-------|----------|------------|--------------|
-| Proxy (original) | 37 | 23.9% | proxy lags, rolling stats, yesterday, direction ratios |
-| Weather (Bardejov) | 10 | 18.8% | temp_deviation, temp_surprise_lag, pressure_change6h, windspeed |
-| DA Prices & Flows | 7 | 14.1% | da_price_change24h, da_flow_cz, da_flow_hu, da_net_import |
-| DAMAS Forecast Error | 5 | 8.5% | damas_fe_rmean24 (#1 overall), damas_fe, damas_fe_abs |
-| Market Spreads | 6 | 7.0% | idm_vwap_lag, spread_da_idm_lag, idm_volume_lag |
-| Time | 9 | 6.4% | hour_sin/cos, dow_sin/cos, is_weekend, is_peak |
-| Load (original) | 4 | 5.4% | load_deviation, load_rmean16, load_momentum |
-| Load (new) | 4 | 4.5% | load_yesterday, load_rstd4, load_ramp4, load_rmean8 |
-| Load Nowcast (OOS) | 4 | 3.8% | nowcast_pred_error, nowcast_pred_error_abs |
-| Proxy (new derived) | 6 | 3.5% | proxy_ewm4, proxy_range8, proxy_abs_rmean |
-| Solar | 2 | 2.8% | solar_surprise_lag, solar_surprise_rmean4 |
-| Regulation | 5 | 2.2% | reg_rmean4/8, reg_rstd8, reg_momentum |
-| Production SCADA | 5 | 0.0% | (short coverage, Oct 2025+ only) |
-| Export/Import SCADA | 5 | 0.0% | (short coverage, Oct 2025+ only) |
+- **Timing**: Place orders at T-120min (2h before delivery)
+- **Products**: 15-min QH IDM products on OKTE/XBID
+- **Gate closure**: T-60min — spreads explode after this, must execute before
+- **Spread filter**: Only trade when bid-ask spread <= 10 EUR/MWh
+
+## Performance (Feb-Mar 2026, True Out-of-Sample)
+
+All results use real bid/ask execution prices from the DB_EMS order book.
+
+### Model Comparison
+
+| Model | EUR/day | Sharpe | Max Drawdown | Worst Day | Prof Days |
+|-------|---------|--------|-------------|-----------|-----------|
+| Imbalance only | +150 | 7.1 | -925 | -755 | 67% |
+| Spread only (standalone) | +486 | 12.8 | -560 | -560 | 84% |
+| **Stacked (3-stage)** | **+449** | **15.5** | **-466** | **-466** | **84%** |
+| Spread + imb filter | +339 | 13.1 | -481 | -481 | 80% |
+
+### Stacked Model Risk Profile
+
+- Max drawdown: **-466 EUR** (1.0 days of profit)
+- Max consecutive losing days: **1**
+- Losing weeks: **0 out of 9**
+- Worst week: **+619 EUR** (still positive)
+- Recovery from max drawdown: **4 days**
+
+### Monthly Consistency
+
+| Month | EUR/day | Win Rate |
+|-------|---------|----------|
+| Feb 2026 | +372 | 60% |
+| Mar 2026 | +525 | 62% |
+
+## Features (113 base + 3 stacking = 116 total)
+
+### Feature Groups by Importance
+
+| Group | Features | Importance | Key Signals |
+|-------|----------|------------|-------------|
+| Proxy (regulation) | 43 | 27% | Regulation lags, momentum, rolling stats, direction ratios |
+| Weather (5-city) | 10 | 19% | temp deviation, forecast surprise, pressure, wind, radiation |
+| DA Prices & Flows | 7 | 14% | Cross-border flows (CZ, HU), price changes, demand/supply |
+| DAMAS Forecast Error | 5 | 9% | 24h rolling mean of load forecast error (top individual feature) |
+| Market Spreads | 6 | 7% | Lagged IDM VWAP, DA-IDM spread, IDM volume |
+| Time | 9 | 6% | Hour, day-of-week, weekend, peak indicator |
+| Load | 8 | 10% | Load deviation, momentum, rolling stats, yesterday |
+| Load Nowcast (Stage 1) | 4 | 4% | Walk-forward OOF H+2 load error predictions |
+| Solar | 2 | 3% | Solar surprise (actual - DA forecast) |
+| Stacking (Stage 2 OOF) | 3 | ~1% | Imbalance prediction, |pred|, direction |
+| Production/Export SCADA | 10 | 0% | Short coverage (Oct 2025+), will improve |
 
 ### Data Sources and Lead-Time Constraints
 
-All features strictly use only information available at prediction time (T - 2h).
+| Source | Shift | Rationale |
+|--------|-------|-----------|
+| SCADA (regulation, load, prod, export) | lead+1 periods | 15-min period completes at T+15min |
+| Solar actual, DAMAS actual, IDM/Imb prices | lead+4 periods | Hourly, published after hour ends |
+| DA prices, DAMAS forecast, DA temp forecast | None | Known D-1 |
+| Weather actuals (Bardejov 5-city) | lead+4 periods | Hourly, published after hour ends |
 
-| Source | Resolution | Coverage | Shift | Rationale |
-|--------|-----------|----------|-------|-----------|
-| Regulation SCADA | 3-min -> 15-min | Full (2024--2026) | 8 periods (2h) | Real-time SCADA |
-| Load SCADA | 3-min -> 15-min | Full | 8 periods (2h) | Real-time SCADA |
-| Production SCADA | 3-min -> 15-min | Oct 2025+ | 8 periods (2h) | Real-time SCADA |
-| Export/Import SCADA | 3-min -> 15-min | Oct 2025+ | 8 periods (2h) | Real-time SCADA |
-| Solar actual/surprise | Hourly -> 15-min | Full | 12 periods (3h) | Published after hour ends |
-| DAMAS forecast error | Hourly -> 15-min | Full | 12 periods (3h) | Actual load published after hour ends |
-| DAMAS forecast load | Hourly -> 15-min | Full | None | D-1 forecast, known since yesterday |
-| DA prices & flows | Hourly -> 15-min | Full | None | Known D-1 at 11:00 |
-| IDM VWAP/volume | Hourly -> 15-min | 2025+ | 12 periods (3h) | Trading closes near delivery |
-| Imbalance settlement price | 15-min | Full | 12 periods (3h) | Published after settlement |
-| Bardejov weather (actual) | Hourly -> 15-min | Full (2024+) | 12 periods (3h) | Published after hour ends |
-| Bardejov DA temp forecast | Hourly -> 15-min | Full (2024+) | None | GFS D+1 forecast, known D-1 |
-| Load nowcast H+2 (OOS) | Hourly -> 15-min | 2025+ | None | Walk-forward OOS prediction made at T-2h |
+### Leakage Audit
 
-## Data Leakage Audit
+Comprehensive audit performed. Three issues found and fixed:
+1. Solar shift: 8 -> 12 periods (hourly publication delay)
+2. Load nowcast: Replaced in-sample with walk-forward OOF predictions
+3. SCADA 15-min: shift(lead) -> shift(lead+1) (period not complete at start)
 
-A comprehensive audit was performed. Three issues were found and fixed:
+All OB features confirmed clean — no correlation with execution prices.
 
-1. **Solar features (FIXED)**: Shift increased from 8 (2h) to 12 (3h) periods. Hourly solar actuals are only known after the hour ends.
+## Execution Methods Tested
 
-2. **Load nowcast predictions (FIXED)**: The original `h2_predictions.csv` contained in-sample predictions from a model trained on ALL data. Replaced with walk-forward out-of-sample predictions (`generate_oos_predictions.py`), where each prediction comes from a model trained only on strictly prior data.
+| Method | Description | Result |
+|--------|-------------|--------|
+| VWAP | Assume execution at volume-weighted average price | +825/day (unrealistic) |
+| Market taker (bid/ask) | Hit best bid/ask at T-120min | +486/day with spread filter |
+| Market maker (limit) | Place limit at top of book, wait for fill | +117/day, 71% fill rate |
 
-   Walk-forward folds:
-   - Fold 1: Train [2024-01, 2025-01), Predict [2025-01, 2025-07)
-   - Fold 2: Train [2024-01, 2025-07), Predict [2025-07, 2025-10)
-   - Fold 3: Train [2024-01, 2025-10), Predict [2025-10, 2026-01)
-   - Fold 4: Train [2024-01, 2026-01), Predict [2026-01, 2026-02)
+The VWAP assumption overstates P&L by ~70%. Bid/ask execution with a spread filter is the realistic baseline.
 
-   OOS nowcast MAE: 44.5 MW, correlation: 0.748.
+## Calibration
 
-3. **`nowcast_recent_bias` shift (FIXED)**: Changed from shift(8) to shift(12) to match DAMAS forecast error treatment.
+P&L-based live calibration adjusts independently for surplus and deficit:
+- **Prediction threshold**: Raised when average P&L/trade goes negative, lowered when profitable
+- **Position sizing**: Scaled 0.3x-1.5x based on recent profitability
+- **Morning reset**: 7-day lookback sets initial thresholds
+- **Mid-day recalibration**: Every 15 trades per side, based on rolling P&L
 
-All other feature groups confirmed safe by audit.
-
-## Trading Strategy Backtest
-
-### Setup
-
-- **Bidirectional**: Sell IDM on surplus prediction, buy IDM on deficit prediction
-- **Confidence-weighted sizing**: Position = min(|prediction|, 5) MWh
-- **Settle at imbalance settlement price** (NOT marginal imb_price -- verified correct)
-- **Jan 19, 2026 price spike excluded** (imb_settlement_price > 5000 EUR/MWh)
-
-### Results: |pred| > 2 MWh threshold, confidence-weighted 1--5 MWh
-
-| Month | Trades | Win Rate | P&L (EUR) | EUR/day |
-|-------|--------|----------|-----------|---------|
-| Oct 2025 | 1,391 | 64% | +23,634 | +762 |
-| Nov 2025 | 1,240 | 65% | +10,894 | +419 |
-| Dec 2025 | 1,497 | 65% | +15,443 | +498 |
-| Jan 2026 | 1,293 | 72% | +27,482 | +1,145 |
-| **Total** | **5,421** | **66%** | **+77,454** | **+692** |
-
-- **82 of 112 trading days profitable (73%)**
-- Worst day: -1,050 EUR
-- Annualized Sharpe: 8.6
-- Confidence sizing 4.6x more profitable than flat 1 MWh sizing
-
-### Strategy Variants
-
-| Filter | Trades/day | Win Rate | P&L (EUR) | EUR/day | Sharpe |
-|--------|-----------|----------|-----------|---------|--------|
-| All predictions, weighted | 91 | 60% | +81,507 | +728 | 8.8 |
-| \|pred\| > 2, weighted | 48 | 66% | +77,454 | +692 | 8.6 |
-| \|pred\| > 5, weighted | 15 | 76% | +50,451 | +450 | 8.4 |
-
-### Caveats
-
-1. **Jan 2026 profit concentration**: The Jan 19 spike (7,258 EUR/MWh settlement price) contributed 57% of Jan deficit P&L. Excluding it, Jan still earns ~4,000 EUR. Base-rate edge is real but more modest.
-
-2. **IDM-Imb structural spread**: In Oct--Dec 2025, a structural +7--9 EUR/MWh IDM>Imb spread existed. The model adds value on top of this. In Jan 2026 the spread flipped negative, and the model correctly adapted to trade the deficit side.
-
-3. **Transaction costs not modeled**: IDM bid-ask spread, market impact, and settlement fees would reduce realized P&L.
-
-4. **Production/Export features inactive**: Oct 2025+ only, 0% importance. Will contribute as more history accumulates.
-
-## Files
+## Project Structure
 
 ```
 ImbalanceForcastingProd/
-  summary.md                      # This file
-  scripts/
-    train_imbalance_2h.py         # Training script (108 features)
-  models/
-    imb_2h_v2_q{10,25,50,75,90}.joblib  # Trained quantile models
-  data/
-    predictions_test_v2.csv       # Test set predictions
-    feature_importance_v2.csv     # Feature importance ranking
-  plots/
-    01_model_evaluation_v2.png    # Scatter, direction accuracy, sample series
-    02_hourly_direction_v2.png    # Direction accuracy by hour
-    03_feature_importance_v2.png  # Top 30 feature importance bar chart
+    summary.md                          # This file
+    data_refresh.md                     # Data source checklist
+
+    scripts/
+        training/
+            train_imbalance_2h.py       # Single-lead (Lead 8) imbalance model
+            train_multi_lead.py         # Multi-lead (4-8) with shared feature engineering
+            train_stacked_model.py      # 3-stage stacked: load -> imbalance -> spread
+
+        backtests/
+            backtest_realistic.py       # Bid/ask execution vs VWAP comparison
+            backtest_limit_orders.py    # Limit order fill simulation from DB_EMS
+            backtest_production.py      # Weekly retrain + P&L calibration
+            backtest_dual_model.py      # Imbalance + spread ensemble strategies
+
+        data_extraction/
+            extract_orderbook_features.py    # 60-min OB features (legacy)
+            extract_orderbook_qh.py          # QH OB features at multiple lead times
+            extract_intraday_ob_features.py  # Intraday pressure + IDM-DA spread
+
+        analysis/
+            test_rmse_quantile.py       # RMSE vs MAE, quantile bands, asymmetric thresholds
+            test_spread_prediction.py   # Spread prediction model discovery
+            check_spread_leakage.py     # Spread model leakage audit
+            plot_backtest.py            # Trading dashboard visualization
+
+    data/
+        features/                       # Extracted feature files
+            orderbook_features.csv      # 60-min OB (legacy)
+            orderbook_qh_features.csv   # QH OB at 5 lead times (330k rows)
+            intraday_ob_features.csv    # IDM-DA spread + market pressure (65k rows)
+            feature_importance_v2.csv   # Model feature rankings
+
+        predictions/                    # Model output predictions
+            predictions_lead{4-8}.csv   # Multi-lead imbalance predictions
+            predictions_test_v2.csv     # Single-lead test predictions
+            stacked_test_predictions.csv # 3-stage stacked predictions
+
+        backtests/                      # Trade-level backtest results
+            backtest_realistic.csv      # Bid/ask execution trades
+            backtest_limit_orders.csv   # Limit order fill simulation
+            backtest_production_*.csv   # Production simulation results
+
+    models/
+        imbalance/                      # Trained LightGBM models
+            imb_2h_v2_q{10,25,50,75,90}.joblib  # Single-lead quantile models
+            imb_lead{4-8}_q{10,50,90}.joblib     # Multi-lead models
+
+    plots/
+        model_evaluation/               # Prediction accuracy plots
+        trading/                        # Trading P&L dashboard
 ```
 
-### Dependencies (other directories)
+## Dependencies
 
-```
-LoadAnalysis/nowcast_5h/tuning/
-  generate_oos_predictions.py           # Walk-forward OOS prediction generator
-  oos_predictions/h2_oos_predictions.csv  # H+2 OOS predictions (9,472 hours)
+### Data Sources (refreshed through April 2026)
 
-data/features/                          # SCADA feature files
-data/master/                            # Imbalance labels
-data/clean/solar/                       # Solar data
-data/Bardejov/Weather/                  # Bardejov weather (actual + DA forecast)
-features/DamasLoad/                     # DAMAS load forecast
-features/DamasPrices/                   # DA prices and cross-border flows
-MarketPriceGap/data/processed/          # IDM/Imbalance market prices
-```
+| Source | Location | Script |
+|--------|----------|--------|
+| SCADA (4 signals) | `data/features/*_3min.csv` | `data/features/clean_features.py` |
+| Imbalance labels | `data/master/master_imbalance_data.csv` | `data/master/create_master_imbalance.py` |
+| DAMAS load | `features/DamasLoad/load_data.csv` | `features/DamasLoad/process_load_data.py` |
+| DA prices | `features/DamasPrices/data/da_prices.csv` | `features/DamasPrices/process_da_prices.py` |
+| Solar | `data/clean/solar/solar_hourly.csv` | `data/clean/solar/clean_solar_data.py` |
+| Market prices | `MarketPriceGap/data/processed/hourly_market_prices.csv` | `MarketPriceGap/scripts/load_market_prices.py` |
+| Weather (5-city) | `data/Bardejov/Weather/slovakia_multi_city_weather.csv` | Open-Meteo API |
+| Load nowcast OOF | `LoadAnalysis/nowcast_5h/tuning/oos_predictions/` | `generate_oos_predictions.py` |
+| Order book | `DB_EMS` (localhost:5432) | `scripts/data_extraction/*.py` |
+
+### External Services
+
+| Service | Purpose | Tier |
+|---------|---------|------|
+| Open-Meteo API | Weather actuals + DA forecast (5 cities) | Free (10k calls/day) |
+| DB_EMS (PostgreSQL) | IDM order book bid/ask (99M rows) | Local |
+| beam-solar (PostgreSQL) | Live SCADA + predictions | Local |
 
 ## Key Findings
 
-1. **Weather is the second-largest signal** (18.8%): Temperature deviation from seasonal normal, temperature forecast surprise, pressure changes, and wind speed all drive load-imbalance dynamics. Using Bardejov (eastern SK) as proxy for whole country -- full SK coverage would likely improve further.
+1. **Predict the spread, not the imbalance.** The IDM-to-settlement spread is the actual P&L signal. The spread model outperforms the imbalance model 3x (+486 vs +150/day) because it directly optimizes for what makes money.
 
-2. **DA market data is highly predictive** (14.1%): Cross-border flows (CZ, HU) and price changes known D-1 with zero leakage risk.
+2. **3-stage stacking improves risk, not return.** Adding imbalance OOF as a feature to the spread model gives the best Sharpe (15.5) and smallest drawdown (-466 EUR), at a modest P&L cost (-37/day vs standalone).
 
-3. **DAMAS forecast error autocorrelation is real signal** (8.5%): The 24h rolling mean of forecast error captures systematic forecast bias that persists and drives imbalance.
+3. **Execution costs matter enormously.** VWAP backtests overstate P&L by 70%. Bid/ask execution with a spread <= 10 filter is the realistic baseline. Execute at T-120min where spreads are liquid (median 2.1 EUR/MWh).
 
-4. **Market spreads encode trader positioning** (7.0%): Lagged IDM VWAP and DA-IDM spread indicate how intraday traders price the system.
+4. **Weather is the second most important signal (19%).** The Bardejov-only weather (0.7% importance) became 19% with 5-city national coverage. Temperature deviation, forecast surprise, and pressure changes all drive load-imbalance dynamics.
 
-5. **Walk-forward OOS nowcast predictions add clean value** (3.8%): Genuine out-of-sample load forecast error predictions. Model improved when switching from leaky in-sample to clean OOS predictions (64.7% -> 66.1% direction accuracy after also adding weather).
+5. **Weekly retraining helps the imbalance model but the spread model is more stable.** The spread model's performance is consistent across months with or without retraining. Live calibration of thresholds and position sizing adds more value than frequent retraining.
 
-6. **Confidence-weighted sizing is highly effective**: Scaling position with prediction magnitude (capped at 5 MWh) multiplied P&L 4.6x vs flat sizing while maintaining Sharpe. The model's calibration -- bigger predictions are more likely correct -- is the foundation of this gain.
+6. **The IDM order book is valuable for execution but not prediction.** OB features as model inputs hurt production P&L because they correlate with spread costs. Use the order book for execution decisions (spread filter, limit orders) only.

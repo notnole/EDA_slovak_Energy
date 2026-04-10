@@ -27,7 +27,7 @@ from collections import deque
 if sys.platform == "win32":
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
-sys.path.insert(0, str(Path(__file__).parent))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "training"))
 from train_multi_lead import load_all_data, build_features
 import train_multi_lead as tml
 from backtest_production import pull_ob_day, get_ob_at_time, Calibrator, DB_CONN

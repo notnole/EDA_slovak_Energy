@@ -30,7 +30,7 @@ from collections import deque
 if sys.platform == "win32":
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
-sys.path.insert(0, str(Path(__file__).parent))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "training"))
 from train_multi_lead import load_all_data, build_features
 import train_multi_lead as tml
 
@@ -239,11 +239,25 @@ def main():
                        parse_dates=['timestamp_hour'], index_col='timestamp_hour')
     mkt = mkt[~mkt.index.duplicated(keep='last')]
 
-    # DB connection for order book
+    # Load intraday order book features
+    ob_path = DATA_DIR / "intraday_ob_features.csv"
+    ob_features = None
+    ob_cols = []
+    if ob_path.exists():
+        ob_features = pd.read_csv(ob_path, parse_dates=['delivery_start'])
+        ob_features = ob_features.set_index('delivery_start')
+        ob_features = ob_features[~ob_features.index.duplicated(keep='last')]
+        ob_cols = [c for c in ob_features.columns if c.startswith('ob_')]
+        print(f"[+] OB features: {len(ob_features)} rows, {len(ob_cols)} features")
+    else:
+        print("[-] No OB features found, running without")
+
+    # DB connection for order book execution prices
     conn = psycopg2.connect(**DB_CONN)
     cur = conn.cursor()
 
-    # Weekly boundaries
+    # Weekly boundaries (set RETRAIN_WEEKLY=False to train once and just calibrate)
+    RETRAIN_WEEKLY = False
     weeks = pd.date_range('2026-02-02', '2026-03-30', freq='W-MON')
     weeks = list(weeks) + [pd.Timestamp('2026-03-30')]
 
@@ -260,19 +274,34 @@ def main():
         week_end = weeks[wi + 1]
         train_end = (week_start - pd.Timedelta(days=1)).strftime('%Y-%m-%d')
 
-        print(f"\n--- Week {week_start.strftime('%Y-%m-%d')}: retrain on data <= {train_end} ---")
+        print(f"\n--- Week {week_start.strftime('%Y-%m-%d')}: {'retrain' if RETRAIN_WEEKLY or wi == 0 else 'reuse model'}, data <= {train_end} ---")
 
-        # Retrain
+        # Build features (always needed for the week's predictions)
         tml.TRAIN_END = train_end
         tml.TEST_START = week_start.strftime('%Y-%m-%d')
-        df, feature_cols = build_features(data, lead)
-        train = df[df.index <= train_end]
-        model = lgb.LGBMRegressor(
-            objective='quantile', alpha=0.50, learning_rate=0.05,
-            num_leaves=63, min_child_samples=50, subsample=0.8,
-            colsample_bytree=0.7, reg_alpha=0.1, reg_lambda=1.0,
-            n_estimators=600, verbose=-1)
-        model.fit(train[feature_cols].values, train['target'].values)
+
+        if RETRAIN_WEEKLY or wi == 0:
+            df, feature_cols = build_features(data, lead)
+
+            # Join OB features
+            if ob_features is not None:
+                df = df.join(ob_features[ob_cols], how='left')
+                all_feature_cols = feature_cols + ob_cols
+            else:
+                all_feature_cols = feature_cols
+
+            train = df[df.index <= train_end]
+            model = lgb.LGBMRegressor(
+                objective='quantile', alpha=0.50, learning_rate=0.05,
+                num_leaves=63, min_child_samples=50, subsample=0.8,
+                colsample_bytree=0.7, reg_alpha=0.1, reg_lambda=1.0,
+                n_estimators=600, verbose=-1)
+            model.fit(train[all_feature_cols].values, train['target'].values)
+            # Cache df for subsequent weeks
+            cached_df = df
+            cached_feature_cols = all_feature_cols
+        else:
+            df = cached_df
 
         # Predict the week
         week_data = df[(df.index >= week_start.strftime('%Y-%m-%d')) &
@@ -280,7 +309,7 @@ def main():
         if len(week_data) == 0:
             continue
         week_data = week_data.copy()
-        week_data['pred'] = model.predict(week_data[feature_cols].values)
+        week_data['pred'] = model.predict(week_data[cached_feature_cols].values)
 
         # Process day by day
         for day in pd.date_range(week_start, week_end - pd.Timedelta(days=1), freq='D'):

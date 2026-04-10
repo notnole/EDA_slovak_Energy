@@ -139,16 +139,23 @@ def load_all_data():
         mkt_15 = mkt.resample('15min').ffill()
         print(f"[+] Market spreads: {len(mkt_15)} periods")
 
-    # Weather (Bardejov)
+    # Weather: multi-city Slovakia (actuals) + Bardejov DA forecast
     weather_15 = None
-    actual_path = REPO_ROOT / "data" / "Bardejov" / "Weather" / "bardejov_weather_actual.csv"
+    multi_path = REPO_ROOT / "data" / "Bardejov" / "Weather" / "slovakia_multi_city_weather.csv"
     da_path = REPO_ROOT / "data" / "Bardejov" / "Weather" / "bardejov_da_forecasts.csv"
-    if actual_path.exists():
-        act = pd.read_csv(actual_path, parse_dates=['time']).set_index('time').sort_index()
-        act = _dedup_index(act)
-        weather = act[['temperature_2m', 'windspeed_10m', 'shortwave_radiation',
-                        'cloudcover', 'surface_pressure']].copy()
-        weather.columns = ['temperature', 'windspeed', 'radiation', 'cloudcover', 'pressure']
+    if multi_path.exists():
+        mc = pd.read_csv(multi_path, parse_dates=['time']).set_index('time').sort_index()
+        mc = _dedup_index(mc)
+        # Keep national aggregates + Bratislava (least correlated) + Bardejov (existing)
+        weather = mc[['temp_national_mean', 'temp_national_spread', 'temp_bratislava',
+                       'wind_national_mean', 'radiation_national_mean',
+                       'pressure_national_mean', 'temp_bardejov',
+                       'cloud_bardejov']].copy()
+        weather = weather.rename(columns={
+            'temp_bardejov': 'temperature',  # backward compat
+            'cloud_bardejov': 'cloudcover',
+        })
+        # DA temperature forecast for target hour (D-1 GFS, Bardejov only — safe)
         if da_path.exists():
             da_wx = pd.read_csv(da_path, parse_dates=['time']).set_index('time').sort_index()
             da_wx = _dedup_index(da_wx)
@@ -158,7 +165,26 @@ def load_all_data():
                     weather = weather.rename(columns={col: 'temp_forecast_da'})
                     break
         weather_15 = weather.resample('15min').ffill()
-        print(f"[+] Weather: {len(weather_15)} periods")
+        print(f"[+] Weather: {len(weather_15)} periods (5-city national + Bardejov DA forecast)")
+    else:
+        # Fallback to single-city Bardejov
+        actual_path = REPO_ROOT / "data" / "Bardejov" / "Weather" / "bardejov_weather_actual.csv"
+        if actual_path.exists():
+            act = pd.read_csv(actual_path, parse_dates=['time']).set_index('time').sort_index()
+            act = _dedup_index(act)
+            weather = act[['temperature_2m', 'windspeed_10m', 'shortwave_radiation',
+                            'cloudcover', 'surface_pressure']].copy()
+            weather.columns = ['temperature', 'windspeed', 'radiation', 'cloudcover', 'pressure']
+            if da_path.exists():
+                da_wx = pd.read_csv(da_path, parse_dates=['time']).set_index('time').sort_index()
+                da_wx = _dedup_index(da_wx)
+                for col in ['gfs_seamless_temp_da1', 'best_match_temp_da1']:
+                    if col in da_wx.columns:
+                        weather = weather.join(da_wx[[col]], how='left')
+                        weather = weather.rename(columns={col: 'temp_forecast_da'})
+                        break
+            weather_15 = weather.resample('15min').ffill()
+            print(f"[+] Weather: {len(weather_15)} periods (Bardejov only, fallback)")
 
     # Load nowcast OOS
     nowcast_15 = None
@@ -384,30 +410,70 @@ def build_features(data, lead):
         for f in ['imb_price_lag', 'imb_price_rmean4', 'spread_da_imb_lag']:
             features[f] = pd.Series(np.nan, index=df.index)
 
-    # --- WEATHER (actual: hourly shift; DA forecast: no shift) ---
+    # --- WEATHER ---
+    # Actuals: shifted by hourly_shift (lead+4, ~3h). These are observations,
+    #          available after the hour ends with ~1h publication delay.
+    # DA forecast: no shift — D-1 GFS forecast for the target hour. Known D-1.
+    #              Only available for Bardejov (we have historical D-1 forecasts).
+    #              NOT using intraday forecast updates — can't verify timing in backtest.
     if 'temperature' in df.columns:
+        # --- Bardejov actuals (backward-compatible) ---
         temp_s = df['temperature'].shift(hourly_shift)
         features['temp'] = temp_s
         features['temp_change6h'] = temp_s - df['temperature'].shift(hourly_shift + 24)
         features['temp_rmean24h'] = temp_s.rolling(96).mean()
         features['temp_deviation'] = temp_s - temp_s.rolling(96 * 7, min_periods=96).mean()
+        features['cloudcover'] = df.get('cloudcover', pd.Series(np.nan, index=df.index)).shift(hourly_shift)
+
+        # --- DA forecast for target hour (Bardejov D-1 GFS, no shift — safe) ---
         if 'temp_forecast_da' in df.columns:
             features['temp_forecast_da'] = df['temp_forecast_da']
             features['temp_surprise_lag'] = (df['temperature'] - df['temp_forecast_da']).shift(hourly_shift)
         else:
             features['temp_forecast_da'] = pd.Series(np.nan, index=df.index)
             features['temp_surprise_lag'] = pd.Series(np.nan, index=df.index)
-        features['windspeed'] = df.get('windspeed', pd.Series(np.nan, index=df.index)).shift(hourly_shift)
-        features['radiation'] = df.get('radiation', pd.Series(np.nan, index=df.index)).shift(hourly_shift)
-        features['cloudcover'] = df.get('cloudcover', pd.Series(np.nan, index=df.index)).shift(hourly_shift)
-        if 'pressure' in df.columns:
+
+        # --- National aggregates (5-city actuals, shifted — safe) ---
+        if 'temp_national_mean' in df.columns:
+            nat_temp_s = df['temp_national_mean'].shift(hourly_shift)
+            features['temp_national'] = nat_temp_s
+            features['temp_national_change6h'] = nat_temp_s - df['temp_national_mean'].shift(hourly_shift + 24)
+            features['temp_national_deviation'] = nat_temp_s - nat_temp_s.rolling(96 * 7, min_periods=96).mean()
+            features['temp_national_spread'] = df['temp_national_spread'].shift(hourly_shift)
+        else:
+            for f in ['temp_national', 'temp_national_change6h', 'temp_national_deviation', 'temp_national_spread']:
+                features[f] = pd.Series(np.nan, index=df.index)
+
+        # --- Bratislava (least correlated with east, biggest load center) ---
+        if 'temp_bratislava' in df.columns:
+            features['temp_bratislava'] = df['temp_bratislava'].shift(hourly_shift)
+        else:
+            features['temp_bratislava'] = pd.Series(np.nan, index=df.index)
+
+        # --- National wind, radiation, pressure (actuals, shifted) ---
+        if 'wind_national_mean' in df.columns:
+            features['wind_national'] = df['wind_national_mean'].shift(hourly_shift)
+        else:
+            features['wind_national'] = df.get('windspeed', pd.Series(np.nan, index=df.index)).shift(hourly_shift)
+
+        if 'radiation_national_mean' in df.columns:
+            features['radiation_national'] = df['radiation_national_mean'].shift(hourly_shift)
+        else:
+            features['radiation_national'] = df.get('radiation', pd.Series(np.nan, index=df.index)).shift(hourly_shift)
+
+        if 'pressure_national_mean' in df.columns:
+            pres_s = df['pressure_national_mean'].shift(hourly_shift)
+            features['pressure_change6h'] = pres_s - df['pressure_national_mean'].shift(hourly_shift + 24)
+        elif 'pressure' in df.columns:
             features['pressure_change6h'] = df['pressure'].shift(hourly_shift) - df['pressure'].shift(hourly_shift + 24)
         else:
             features['pressure_change6h'] = pd.Series(np.nan, index=df.index)
     else:
         for f in ['temp', 'temp_change6h', 'temp_rmean24h', 'temp_deviation',
-                   'temp_forecast_da', 'temp_surprise_lag',
-                   'windspeed', 'radiation', 'cloudcover', 'pressure_change6h']:
+                   'temp_forecast_da', 'temp_surprise_lag', 'cloudcover',
+                   'temp_national', 'temp_national_change6h', 'temp_national_deviation',
+                   'temp_national_spread', 'temp_bratislava',
+                   'wind_national', 'radiation_national', 'pressure_change6h']:
             features[f] = pd.Series(np.nan, index=df.index)
 
     # --- LOAD NOWCAST (H+2 OOS, only valid for lead >= 8; for shorter leads use as stale signal) ---

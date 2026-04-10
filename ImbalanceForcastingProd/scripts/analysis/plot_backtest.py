@@ -10,7 +10,7 @@ import matplotlib.dates as mdates
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).parent))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "training"))
 from train_multi_lead import load_all_data, build_features
 import train_multi_lead as tml
 

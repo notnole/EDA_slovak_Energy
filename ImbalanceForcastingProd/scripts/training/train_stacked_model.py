@@ -22,7 +22,7 @@ from pathlib import Path
 if sys.platform == "win32":
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
-sys.path.insert(0, str(Path(__file__).parent))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "training"))
 from train_multi_lead import load_all_data, build_features
 import train_multi_lead as tml
 
