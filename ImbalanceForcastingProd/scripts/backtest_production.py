@@ -43,10 +43,8 @@ DB_CONN = dict(host='localhost', port=5432, dbname='DB_EMS',
 
 # Calibration parameters
 BASE_THRESHOLD = 3.0       # minimum |pred| to trade
-RECALIB_EVERY_N = 20       # recalibrate after this many trades per side
-WIN_RATE_TARGET = 0.55     # if rolling win rate drops below this, raise threshold
-THRESHOLD_STEP = 1.0       # how much to raise threshold per calibration
-MAX_THRESHOLD = 8.0        # never go above this
+BASE_SIZE_SCALE = 1.0      # base position size multiplier (1.0 = normal)
+RECALIB_EVERY_N = 15       # recalibrate after this many trades per side
 LOOKBACK_DAYS = 7          # morning calibration lookback
 MAX_SPREAD_TAKER = 10      # spread filter for market taker
 MAX_SPREAD_MAKER = 10      # entry spread filter for limit orders
@@ -104,63 +102,113 @@ def simulate_limit_fill(period_data, direction, entry_snap):
 
 
 class Calibrator:
-    """Tracks recent trade outcomes and adjusts thresholds."""
+    """P&L-based calibrator.
+
+    Tracks actual EUR profit per trade (not just win/loss) and adjusts:
+    - Prediction threshold: raise when avg P&L/trade is negative, lower when profitable
+    - Position size scale: scale down when losing, scale up when profitable
+    - Independently for surplus and deficit sides
+
+    The key insight: a side can have 55% win rate but still lose money if the
+    average loss is bigger than the average win. P&L per trade captures this.
+    """
 
     def __init__(self):
-        self.surplus_trades = deque(maxlen=RECALIB_EVERY_N * 2)
-        self.deficit_trades = deque(maxlen=RECALIB_EVERY_N * 2)
+        self.surplus_pnls = deque(maxlen=60)
+        self.deficit_pnls = deque(maxlen=60)
         self.surplus_threshold = BASE_THRESHOLD
         self.deficit_threshold = BASE_THRESHOLD
+        self.surplus_size_scale = BASE_SIZE_SCALE
+        self.deficit_size_scale = BASE_SIZE_SCALE
         self.n_since_calib_surplus = 0
         self.n_since_calib_deficit = 0
 
-    def morning_reset(self, recent_trades):
-        """Morning calibration from last 7 days of actual P&L."""
-        if len(recent_trades) == 0:
-            self.surplus_threshold = BASE_THRESHOLD
-            self.deficit_threshold = BASE_THRESHOLD
-            return
+    def _calibrate_side(self, pnls, current_thresh, current_scale):
+        """Calibrate one side based on recent P&L per trade."""
+        if len(pnls) < 8:
+            return current_thresh, current_scale
 
-        for direction, attr in [('surplus', 'surplus_threshold'), ('deficit', 'deficit_threshold')]:
+        recent = list(pnls)[-RECALIB_EVERY_N:] if len(pnls) >= RECALIB_EVERY_N else list(pnls)
+        avg_pnl = np.mean(recent)
+        total_pnl = np.sum(recent)
+
+        # Threshold: based on whether the side is profitable
+        if avg_pnl < -2:
+            # Losing money — raise threshold significantly
+            new_thresh = min(current_thresh + 1.5, 8.0)
+        elif avg_pnl < 0:
+            # Slightly negative — nudge up
+            new_thresh = min(current_thresh + 0.5, 8.0)
+        elif avg_pnl > 5:
+            # Very profitable — can afford lower threshold
+            new_thresh = max(current_thresh - 1.0, BASE_THRESHOLD)
+        elif avg_pnl > 2:
+            # Solidly profitable — ease back slightly
+            new_thresh = max(current_thresh - 0.5, BASE_THRESHOLD)
+        else:
+            # Marginal — hold steady
+            new_thresh = current_thresh
+
+        # Size scaling: proportional to profitability
+        if avg_pnl > 3:
+            new_scale = min(current_scale + 0.2, 1.5)
+        elif avg_pnl > 0:
+            new_scale = min(current_scale + 0.1, 1.3)
+        elif avg_pnl > -2:
+            new_scale = max(current_scale - 0.1, 0.5)
+        else:
+            new_scale = max(current_scale - 0.3, 0.3)
+
+        return new_thresh, new_scale
+
+    def morning_reset(self, recent_trades):
+        """Morning calibration from last N days of actual P&L."""
+        for direction in ['surplus', 'deficit']:
             side = [t for t in recent_trades if t['direction'] == direction]
             if len(side) >= 10:
-                wr = np.mean([t['pnl'] > 0 for t in side])
-                if wr < WIN_RATE_TARGET:
-                    new_thresh = min(BASE_THRESHOLD + THRESHOLD_STEP * 2, MAX_THRESHOLD)
-                elif wr > 0.65:
-                    new_thresh = BASE_THRESHOLD
+                avg_pnl = np.mean([t['pnl'] for t in side])
+                # Set threshold based on recent avg P&L
+                if avg_pnl < -1:
+                    thresh = min(BASE_THRESHOLD + 2.0, 8.0)
+                    scale = 0.5
+                elif avg_pnl < 1:
+                    thresh = BASE_THRESHOLD + 1.0
+                    scale = 0.8
+                elif avg_pnl > 5:
+                    thresh = BASE_THRESHOLD
+                    scale = 1.3
                 else:
-                    new_thresh = BASE_THRESHOLD + THRESHOLD_STEP
-                setattr(self, attr, new_thresh)
+                    thresh = BASE_THRESHOLD
+                    scale = 1.0
             else:
-                setattr(self, attr, BASE_THRESHOLD)
+                thresh = BASE_THRESHOLD
+                scale = BASE_SIZE_SCALE
+
+            if direction == 'surplus':
+                self.surplus_threshold = thresh
+                self.surplus_size_scale = scale
+            else:
+                self.deficit_threshold = thresh
+                self.deficit_size_scale = scale
 
         self.n_since_calib_surplus = 0
         self.n_since_calib_deficit = 0
 
     def record_trade(self, direction, pnl):
-        """Record a trade outcome and recalibrate if needed."""
+        """Record a trade's actual P&L and recalibrate if enough trades."""
         if direction == 'surplus':
-            self.surplus_trades.append(pnl > 0)
+            self.surplus_pnls.append(pnl)
             self.n_since_calib_surplus += 1
-            if self.n_since_calib_surplus >= RECALIB_EVERY_N and len(self.surplus_trades) >= RECALIB_EVERY_N:
-                recent = list(self.surplus_trades)[-RECALIB_EVERY_N:]
-                wr = np.mean(recent)
-                if wr < WIN_RATE_TARGET:
-                    self.surplus_threshold = min(self.surplus_threshold + THRESHOLD_STEP, MAX_THRESHOLD)
-                elif wr > 0.65 and self.surplus_threshold > BASE_THRESHOLD:
-                    self.surplus_threshold = max(self.surplus_threshold - THRESHOLD_STEP, BASE_THRESHOLD)
+            if self.n_since_calib_surplus >= RECALIB_EVERY_N:
+                self.surplus_threshold, self.surplus_size_scale = self._calibrate_side(
+                    self.surplus_pnls, self.surplus_threshold, self.surplus_size_scale)
                 self.n_since_calib_surplus = 0
         else:
-            self.deficit_trades.append(pnl > 0)
+            self.deficit_pnls.append(pnl)
             self.n_since_calib_deficit += 1
-            if self.n_since_calib_deficit >= RECALIB_EVERY_N and len(self.deficit_trades) >= RECALIB_EVERY_N:
-                recent = list(self.deficit_trades)[-RECALIB_EVERY_N:]
-                wr = np.mean(recent)
-                if wr < WIN_RATE_TARGET:
-                    self.deficit_threshold = min(self.deficit_threshold + THRESHOLD_STEP, MAX_THRESHOLD)
-                elif wr > 0.65 and self.deficit_threshold > BASE_THRESHOLD:
-                    self.deficit_threshold = max(self.deficit_threshold - THRESHOLD_STEP, BASE_THRESHOLD)
+            if self.n_since_calib_deficit >= RECALIB_EVERY_N:
+                self.deficit_threshold, self.deficit_size_scale = self._calibrate_side(
+                    self.deficit_pnls, self.deficit_threshold, self.deficit_size_scale)
                 self.n_since_calib_deficit = 0
 
     def should_trade(self, direction, pred_abs):
@@ -169,6 +217,13 @@ class Calibrator:
             return pred_abs >= self.surplus_threshold
         else:
             return pred_abs >= self.deficit_threshold
+
+    def get_size_scale(self, direction):
+        """Get current position size multiplier."""
+        if direction == 'surplus':
+            return self.surplus_size_scale
+        else:
+            return self.deficit_size_scale
 
 
 def main():
@@ -249,7 +304,6 @@ def main():
                 pred_val = row['pred']
                 pred_abs = abs(pred_val)
                 direction = 'surplus' if pred_val > 0 else 'deficit'
-                size = min(pred_abs, 5.0)
                 period = idx.hour * 4 + idx.minute // 15
 
                 # Get settlement price
@@ -263,13 +317,16 @@ def main():
                 # Get order book state
                 period_ob = ob_day[ob_day['periodfrom'] == period].sort_values('lastupdate')
                 entry_snap = get_ob_at_time(period_ob, 120) if len(period_ob) > 0 else None
-                exit_snap = get_ob_at_time(period_ob, 65) if len(period_ob) > 0 else None
 
                 # === MARKET TAKER ===
                 if calib_taker.should_trade(direction, pred_abs):
                     if entry_snap is not None:
                         spread = entry_snap['ask'] - entry_snap['bid'] if pd.notna(entry_snap['ask']) and pd.notna(entry_snap['bid']) else np.nan
                         if pd.notna(spread) and spread <= MAX_SPREAD_TAKER:
+                            # Size = prediction magnitude * calibrated scale, capped at 5
+                            scale = calib_taker.get_size_scale(direction)
+                            size = min(pred_abs * scale, 5.0)
+
                             if direction == 'surplus' and pd.notna(entry_snap['bid']):
                                 pnl = (entry_snap['bid'] - imb_price) * size / 4
                             elif direction == 'deficit' and pd.notna(entry_snap['ask']):
@@ -282,7 +339,9 @@ def main():
                                          'target': row['target'], 'size': size, 'pnl': pnl,
                                          'spread': spread,
                                          'thresh_s': calib_taker.surplus_threshold,
-                                         'thresh_d': calib_taker.deficit_threshold}
+                                         'thresh_d': calib_taker.deficit_threshold,
+                                         'scale_s': calib_taker.surplus_size_scale,
+                                         'scale_d': calib_taker.deficit_size_scale}
                                 all_taker_trades.append(trade)
                                 recent_taker_history.append(trade)
                                 calib_taker.record_trade(direction, pnl)
@@ -292,6 +351,9 @@ def main():
                     if entry_snap is not None and len(period_ob) > 1:
                         entry_spread = entry_snap['ask'] - entry_snap['bid'] if pd.notna(entry_snap['ask']) and pd.notna(entry_snap['bid']) else np.nan
                         if pd.notna(entry_spread) and entry_spread <= MAX_SPREAD_MAKER:
+                            scale = calib_maker.get_size_scale(direction)
+                            size = min(pred_abs * scale, 5.0)
+
                             filled, limit_price = simulate_limit_fill(period_ob, direction, entry_snap)
                             if filled and pd.notna(limit_price):
                                 if direction == 'surplus':
@@ -303,7 +365,9 @@ def main():
                                          'target': row['target'], 'size': size, 'pnl': pnl,
                                          'spread': entry_spread, 'limit_price': limit_price,
                                          'thresh_s': calib_maker.surplus_threshold,
-                                         'thresh_d': calib_maker.deficit_threshold}
+                                         'thresh_d': calib_maker.deficit_threshold,
+                                         'scale_s': calib_maker.surplus_size_scale,
+                                         'scale_d': calib_maker.deficit_size_scale}
                                 all_maker_trades.append(trade)
                                 recent_maker_history.append(trade)
                                 calib_maker.record_trade(direction, pnl)
@@ -358,13 +422,20 @@ def main():
             if len(sub) > 0:
                 print(f"    {d}: {len(sub)} trades, win={(sub['pnl']>0).mean():.0%}, P&L={sub['pnl'].sum():>+,.0f}")
 
-        # Threshold evolution
-        print(f"  Threshold evolution:")
+        # Calibration evolution
+        print(f"  Calibration evolution:")
         tf['week'] = tf.index.to_period('W')
         for week, grp in tf.groupby('week'):
             ts = grp['thresh_s'].iloc[-1]
             td = grp['thresh_d'].iloc[-1]
-            print(f"    {week}: surplus_thresh={ts:.1f}, deficit_thresh={td:.1f}")
+            ss = grp['scale_s'].iloc[-1] if 'scale_s' in grp.columns else 1.0
+            sd = grp['scale_d'].iloc[-1] if 'scale_d' in grp.columns else 1.0
+            avg_pnl = grp['pnl'].mean()
+            print(f"    {week}: thresh S={ts:.1f}/D={td:.1f}, scale S={ss:.1f}/D={sd:.1f}, avg_pnl={avg_pnl:+.1f}")
+
+        # Avg P&L per trade (the metric calibration is based on)
+        print(f"  Avg P&L per trade: {tf['pnl'].mean():+.1f} EUR")
+        print(f"  Avg size: {tf['size'].mean():.1f} MWh")
 
         # Save
         tf.to_csv(DATA_DIR / f"backtest_production_{name.split('(')[0].strip().lower().replace(' ', '_')}.csv")
