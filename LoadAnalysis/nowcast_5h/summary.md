@@ -110,6 +110,31 @@ load_predictions = predictor.predict_load(
 - **Source**: DAMAS hourly forecasts and actuals, 3-minute load data
 - **Validation**: January 2026 holdout (not used in final production training)
 
+## Relationship to LoadForcasting Project
+
+The best day-ahead load forecasting models live in a separate repository at `C:\Users\noelp\PycharmProjects\LoadForcasting\`. These are **different problems** from this nowcast:
+
+| Aspect | This Nowcast (H+2) | LoadForcasting (DA) |
+|--------|-------------------|---------------------|
+| Lead time | 2h (intraday) | 24h (day-ahead, midnight origin) |
+| Target | DAMAS forecast error | Raw load / TSO forecast error |
+| Key features | Error lags (r=0.74), 3-min SCADA | Weather (temp change), calendar, TSO residual |
+| Best MAE | 48.9 MW (H+2 Q0) | 56.8 MW (v11 ensemble) |
+| Baseline | DAMAS 83.4 MW | TSO 70.9 MW |
+
+### LoadForcasting best models (Nov 2025 - Jan 2026 test)
+
+- **v11 Ensemble** (56.8 MW, +20% vs TSO): 35% v6 + 40% v9 + 25% GAM
+- **v9 Global** (58.9 MW, +17%): Single LightGBM, 45 features with hour interactions
+- **v6 TSO Correction** (59.6 MW, +16%): 24 per-hour LightGBMs, `load - TSO_forecast` target
+- **v9 Quantile** (58.5 MW, production): Walk-forward, CQR-calibrated P05-P95
+
+Key lesson from LoadForcasting: **target choice > model choice** (switching to TSO residual target gave +33% MAE reduction, the single biggest improvement in that project's v1-v11 progression).
+
+### How this nowcast is consumed
+
+The H+2 OOS predictions from `tuning/oos_predictions/h2_oos_predictions.csv` are used as a feature in `ImbalanceForcastingProd`'s 3-stage stacked trading model (Stage 1 input). The OOS file is indexed by **prediction time** (not delivery hour), so the downstream consumer must shift by `lead` periods to avoid data leakage.
+
 ## Dependencies
 
 - pandas >= 1.5.0

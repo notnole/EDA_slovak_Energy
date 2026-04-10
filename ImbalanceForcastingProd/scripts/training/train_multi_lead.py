@@ -32,11 +32,11 @@ import warnings
 warnings.filterwarnings('ignore')
 
 SCRIPT_DIR = Path(__file__).resolve().parent
-BASE_DIR = SCRIPT_DIR.parent
+BASE_DIR = SCRIPT_DIR.parents[1]  # ImbalanceForcastingProd/
 DATA_DIR = BASE_DIR / "data"
 PLOT_DIR = BASE_DIR / "plots"
 MODEL_DIR = BASE_DIR / "models"
-REPO_ROOT = SCRIPT_DIR.parents[1]
+REPO_ROOT = BASE_DIR.parent  # repo root
 
 for d in [DATA_DIR, PLOT_DIR, MODEL_DIR]:
     d.mkdir(parents=True, exist_ok=True)
@@ -186,16 +186,28 @@ def load_all_data():
             weather_15 = weather.resample('15min').ffill()
             print(f"[+] Weather: {len(weather_15)} periods (Bardejov only, fallback)")
 
-    # Load nowcast OOS
+    # Load nowcast OOS (H+2 through H+5)
     nowcast_15 = None
-    oos_path = REPO_ROOT / "LoadAnalysis" / "nowcast_5h" / "tuning" / "oos_predictions" / "h2_oos_predictions.csv"
+    oos_dir = REPO_ROOT / "LoadAnalysis" / "nowcast_5h" / "tuning" / "oos_predictions"
+    oos_path = oos_dir / "h2_oos_predictions.csv"
     if oos_path.exists():
         nc = pd.read_csv(oos_path, parse_dates=['datetime']).set_index('datetime').sort_index()
         nc = _dedup_index(nc)
         nowcast = nc[['predicted_error', 'actual_error']].copy()
         nowcast.columns = ['nowcast_pred_error', 'nowcast_actual_error']
         nowcast_15 = nowcast.resample('15min').ffill()
-        print(f"[+] Load nowcast OOS: {len(nowcast_15)} periods")
+        print(f"[+] Load nowcast OOS H+2: {len(nowcast_15)} periods")
+
+        # Load H+3, H+4, H+5 for multi-horizon features
+        for h in [3, 4, 5]:
+            h_path = oos_dir / f"h{h}_oos_predictions.csv"
+            if h_path.exists():
+                nc_h = pd.read_csv(h_path, parse_dates=['datetime']).set_index('datetime').sort_index()
+                nc_h = _dedup_index(nc_h)
+                nc_h_15 = nc_h[['predicted_error']].rename(
+                    columns={'predicted_error': f'nowcast_h{h}_pred'}).resample('15min').ffill()
+                nowcast_15 = nowcast_15.join(nc_h_15, how='left')
+                print(f"[+] Load nowcast OOS H+{h}: {len(nc_h_15)} periods")
 
     # Imbalance labels
     path = REPO_ROOT / "data" / "master" / "master_imbalance_data.csv"
@@ -476,15 +488,38 @@ def build_features(data, lead):
                    'wind_national', 'radiation_national', 'pressure_change6h']:
             features[f] = pd.Series(np.nan, index=df.index)
 
-    # --- LOAD NOWCAST (H+2 OOS, only valid for lead >= 8; for shorter leads use as stale signal) ---
+    # --- LOAD NOWCAST (multi-horizon OOS) ---
+    # OOS files are indexed by PREDICTION TIME. H+X prediction made at T targets T+Xh.
+    # To get the prediction targeting delivery hour T, use the one made at T-Xh:
+    #   shift = X * 4 (hours to 15-min periods)
+    # All horizons target the SAME delivery hour from progressively earlier vantage points.
+    # Momentum (H+2 - H+3) = how the forecast evolves as delivery approaches.
     if 'nowcast_pred_error' in df.columns:
-        features['nowcast_pred_error'] = df['nowcast_pred_error']
-        features['nowcast_pred_error_abs'] = df['nowcast_pred_error'].abs()
-        features['nowcast_pred_rmean4'] = df['nowcast_pred_error'].rolling(4).mean()
-        nowcast_bias_s = (df['nowcast_pred_error'] - df['nowcast_actual_error']).shift(hourly_shift)
-        features['nowcast_recent_bias'] = nowcast_bias_s.rolling(8).mean()
+        # H+2: shift by 2h = 8 periods (= lead for lead=8, staler for shorter leads)
+        nowcast_h2 = df['nowcast_pred_error'].shift(2 * 4)
+        features['nowcast_pred_error'] = nowcast_h2
+        features['nowcast_pred_error_abs'] = nowcast_h2.abs()
+        features['nowcast_pred_rmean4'] = nowcast_h2.rolling(4).mean()
+
+        # H+3, H+4, H+5: earlier predictions of the same delivery hour
+        prev_h = nowcast_h2
+        for h in [3, 4, 5]:
+            col = f'nowcast_h{h}_pred'
+            if col in df.columns:
+                nowcast_hx = df[col].shift(h * 4)
+                features[f'nowcast_h{h}'] = nowcast_hx
+                # Momentum: how forecast changes between adjacent horizons
+                # H+2 - H+3 = change from 3h-ago prediction to 2h-ago prediction
+                features[f'nowcast_momentum_h{h-1}h{h}'] = prev_h - nowcast_hx
+                prev_h = nowcast_hx
+
+        # Overall nowcast trend: H+2 vs H+5 (most recent vs earliest)
+        if 'nowcast_h5_pred' in df.columns:
+            nowcast_h5 = df['nowcast_h5_pred'].shift(5 * 4)
+            features['nowcast_trend_h2_h5'] = nowcast_h2 - nowcast_h5
+            features['nowcast_convergence'] = nowcast_h2.abs() - nowcast_h5.abs()
     else:
-        for f in ['nowcast_pred_error', 'nowcast_pred_error_abs', 'nowcast_pred_rmean4', 'nowcast_recent_bias']:
+        for f in ['nowcast_pred_error', 'nowcast_pred_error_abs', 'nowcast_pred_rmean4']:
             features[f] = pd.Series(np.nan, index=df.index)
 
     # --- TIME ---

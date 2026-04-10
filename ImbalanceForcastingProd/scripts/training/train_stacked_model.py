@@ -26,9 +26,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "training"))
 from train_multi_lead import load_all_data, build_features
 import train_multi_lead as tml
 
-BASE_DIR = Path(__file__).resolve().parent.parent
+BASE_DIR = Path(__file__).resolve().parents[2]  # ImbalanceForcastingProd/
 DATA_DIR = BASE_DIR / "data"
-REPO_ROOT = BASE_DIR.parent
+REPO_ROOT = BASE_DIR.parent  # repo root
 
 LEAD = 8
 
@@ -66,7 +66,7 @@ def main():
           f"{stage1_oof_15.index.min()} to {stage1_oof_15.index.max()}")
 
     # Load execution prices + settlement for spread target
-    ob_exec = pd.read_csv(DATA_DIR / "orderbook_qh_features.csv", parse_dates=['delivery_start'])
+    ob_exec = pd.read_csv(DATA_DIR / "features" / "orderbook_qh_features.csv", parse_dates=['delivery_start'])
     ob_120 = ob_exec[ob_exec['lead_minutes'] == 120].set_index('delivery_start')[['bid', 'ask', 'spread', 'mid']]
     ob_120 = ob_120[~ob_120.index.duplicated(keep='last')]
     ob_120.columns = ['exec_bid', 'exec_ask', 'exec_spread', 'exec_mid']
