@@ -156,15 +156,17 @@ def prepare_data():
     ob_120 = ob_120[~ob_120.index.duplicated(keep='last')]
     ob_120.columns = ['exec_bid', 'exec_ask', 'exec_spread', 'exec_mid']
 
-    # Join imbalance settlement price
-    mkt = pd.read_csv(REPO_ROOT / "MarketPriceGap" / "data" / "processed" / "hourly_market_prices.csv",
-                       parse_dates=['timestamp_hour'], index_col='timestamp_hour')
-    mkt = mkt[~mkt.index.duplicated(keep='last')]
-
     df_base = df_base.join(ob_120, how='left')
+
+    # Use 15-min settlement price from master_imbalance_data (already in df_base
+    # as 'imb_settle_price' via build_features).
+    df_base['imb_settlement_price'] = df_base['imb_settle_price']
+
+    # Hourly-smoothed spread target (matching production train_stacked_model.py)
     df_base['hour_ts'] = df_base.index.floor('h')
-    df_base = df_base.join(mkt[['imb_settlement_price']], on='hour_ts', how='left')
-    df_base['spread_target'] = df_base['imb_settlement_price'] - df_base['exec_mid']
+    df_base['settle_hourly'] = df_base.groupby('hour_ts')['imb_settlement_price'].transform('mean')
+    df_base['mid_hourly'] = df_base.groupby('hour_ts')['exec_mid'].transform('mean')
+    df_base['spread_target'] = df_base['settle_hourly'] - df_base['mid_hourly']
 
     print(f"[+] Base features: {len(feature_cols)} columns, {len(df_base)} rows")
     return df_base, feature_cols

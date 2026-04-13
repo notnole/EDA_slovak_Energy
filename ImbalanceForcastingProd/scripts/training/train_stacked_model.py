@@ -34,6 +34,23 @@ REPO_ROOT = BASE_DIR.parent  # repo root
 
 LEAD = 8
 
+# 52 features selected by permutation importance + backward elimination + correlation pruning.
+# See: scripts/analysis/feature_selection_spread.py
+# Validation: 120 -> 52 features, P&L +417/d (was +415), drawdown -1314 (was -1488).
+SELECTED_FEATURES = [
+    'da_price', 'cloudcover', 'hour_cos', 'idm_vwap_lag', 'da_supply',
+    'da_price_change24h', 'proxy_rmax4', 'temp_forecast_da', 'temp_national_spread',
+    'temp_bratislava', 'load_rmean16', 'nowcast_momentum_h2h3', 'temp_national_change6h',
+    'da_demand', 'temp_surprise_lag', 'proxy_rmean16', 'proxy_range8', 'hour_sin',
+    'spread_da_imb_lag', 'prod_momentum', 'nowcast_pred_rmean4', 'nowcast_momentum_h4h5',
+    'da_flow_cz', 'load_momentum', 'xborder_momentum', 'nowcast_h3', 'radiation_national',
+    'da_net_import', 'proxy_rmean32', 'nowcast_trend_h2_h5', 'dow_sin', 'imb_price_rmean4',
+    'reg_rmean8', 'reg_vol_rmean4', 'proxy_dev_from_hour', 'proxy_yesterday', 'prod_rmean8',
+    'dow_cos', 'solar_surprise_lag', 'nowcast_h5', 'proxy_rmin4', 'nowcast_convergence',
+    'reg_rmean4', 'is_weekend', 'proxy_yesterday_2', 'temp_rmean24h', 'proxy_range4',
+    'proxy_lag12', 'proxy_pos_ratio_4', 'proxy_lag21', 'proxy_lag18', 'damas_fe_rmean4',
+]
+
 FOLDS = [
     # (train_end, pred_start, pred_end)
     ('2025-07-01', '2025-07-01', '2025-10-01'),
@@ -82,7 +99,12 @@ def main():
     # Raw 15-min spread (for P&L evaluation only — never trained on)
     df_base['spread_15m'] = df_base['imb_settlement_price'] - df_base['exec_mid']
 
-    print(f"[+] Base features: {len(feature_cols)} columns, {len(df_base)} rows")
+    # Validate selected features exist in the full set
+    spread_features = [f for f in SELECTED_FEATURES if f in feature_cols]
+    missing = [f for f in SELECTED_FEATURES if f not in feature_cols]
+    if missing:
+        print(f"[!] Warning: {len(missing)} selected features not found: {missing}")
+    print(f"[+] All features: {len(feature_cols)}, spread model: {len(spread_features)}, {len(df_base)} rows")
 
     # ============================================================
     # WALK-FORWARD FOLD PROCESSING
@@ -125,16 +147,16 @@ def main():
         imb_oof = pred_data[['imb_pred', 'target']].copy()
         all_imb_oof.append(imb_oof)
 
-        # --- SPREAD MODEL (main model — base features, hourly-smoothed target) ---
+        # --- SPREAD MODEL (main model — selected features, hourly-smoothed target) ---
         sp_train = train.dropna(subset=['spread_target'])
         sp_train = sp_train[sp_train['imb_settlement_price'].abs() <= 5000]
 
-        print(f"  Spread model: {len(feature_cols)} features, {len(sp_train)} train rows")
+        print(f"  Spread model: {len(spread_features)} features, {len(sp_train)} train rows")
 
         m_sp = lgb.LGBMRegressor(objective='quantile', alpha=0.50, **LGB_PARAMS)
-        m_sp.fit(sp_train[feature_cols].values, sp_train['spread_target'].values)
+        m_sp.fit(sp_train[spread_features].values, sp_train['spread_target'].values)
 
-        pred_data['spread_pred'] = m_sp.predict(pred_data[feature_cols].values)
+        pred_data['spread_pred'] = m_sp.predict(pred_data[spread_features].values)
 
         if pred_data['spread_15m'].notna().sum() > 0:
             sp_nz = pred_data['spread_15m'].abs() > 0.1
@@ -143,7 +165,7 @@ def main():
 
         # Feature importance (last fold only to avoid spam)
         if fi == len(FOLDS) - 1:
-            imp = pd.DataFrame({'feature': feature_cols, 'importance': m_sp.feature_importances_})
+            imp = pd.DataFrame({'feature': spread_features, 'importance': m_sp.feature_importances_})
             imp['pct'] = imp['importance'] / imp['importance'].sum() * 100
             imp = imp.sort_values('pct', ascending=False)
             print(f"\n    Top 15 features (last fold):")
