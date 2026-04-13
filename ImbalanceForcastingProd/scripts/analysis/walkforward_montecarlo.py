@@ -2,12 +2,13 @@
 Walk-Forward Monte Carlo Risk Analysis
 ========================================
 
-Proper out-of-sample evaluation:
+Proper out-of-sample evaluation of the 2-stage spread model:
   1. Expanding window: train on all data up to month N
   2. Trade month N+1 with bid/ask execution
   3. Collect OOS trades across ALL months
   4. Bootstrap MC from the combined OOS distribution
 
+Model: 52 selected features, hourly-smoothed spread target.
 This avoids the circularity of testing on the same data we selected the strategy from.
 """
 
@@ -45,6 +46,21 @@ LGB_PARAMS = dict(learning_rate=0.05, num_leaves=63, min_child_samples=50,
                   subsample=0.8, colsample_bytree=0.7, reg_alpha=0.1,
                   reg_lambda=1.0, n_estimators=600, verbose=-1)
 
+# 52 selected features (from feature_selection_spread.py)
+SELECTED_FEATURES = [
+    'da_price', 'cloudcover', 'hour_cos', 'idm_vwap_lag', 'da_supply',
+    'da_price_change24h', 'proxy_rmax4', 'temp_forecast_da', 'temp_national_spread',
+    'temp_bratislava', 'load_rmean16', 'nowcast_momentum_h2h3', 'temp_national_change6h',
+    'da_demand', 'temp_surprise_lag', 'proxy_rmean16', 'proxy_range8', 'hour_sin',
+    'spread_da_imb_lag', 'prod_momentum', 'nowcast_pred_rmean4', 'nowcast_momentum_h4h5',
+    'da_flow_cz', 'load_momentum', 'xborder_momentum', 'nowcast_h3', 'radiation_national',
+    'da_net_import', 'proxy_rmean32', 'nowcast_trend_h2_h5', 'dow_sin', 'imb_price_rmean4',
+    'reg_rmean8', 'reg_vol_rmean4', 'proxy_dev_from_hour', 'proxy_yesterday', 'prod_rmean8',
+    'dow_cos', 'solar_surprise_lag', 'nowcast_h5', 'proxy_rmin4', 'nowcast_convergence',
+    'reg_rmean4', 'is_weekend', 'proxy_yesterday_2', 'temp_rmean24h', 'proxy_range4',
+    'proxy_lag12', 'proxy_pos_ratio_4', 'proxy_lag21', 'proxy_lag18', 'damas_fe_rmean4',
+]
+
 # Walk-forward folds: train on everything before, trade the month
 # Start trading from Oct 2024 (need 6+ months of training)
 FOLDS = [
@@ -79,20 +95,29 @@ def main():
     tml.TEST_START = '2026-04-01'
     df_base, feature_cols = build_features(data, LEAD)
 
-    # Join execution + settlement
+    # Validate selected features
+    spread_features = [f for f in SELECTED_FEATURES if f in feature_cols]
+    missing = [f for f in SELECTED_FEATURES if f not in feature_cols]
+    if missing:
+        print(f"[!] Warning: {len(missing)} selected features not found: {missing}")
+
+    # Join execution prices
     ob_exec = pd.read_csv(DATA_DIR / "features" / "orderbook_qh_features.csv",
                           parse_dates=['delivery_start'])
     ob_120 = ob_exec[ob_exec['lead_minutes'] == 120].set_index('delivery_start')[['bid', 'ask', 'spread', 'mid']]
     ob_120 = ob_120[~ob_120.index.duplicated(keep='last')]
     ob_120.columns = ['exec_bid', 'exec_ask', 'exec_spread', 'exec_mid']
 
-    # Use 15-min settlement price (already in df_base as imb_settle_price
-    # from master_imbalance_data via build_features)
     df_base = df_base.join(ob_120, how='left')
     df_base['imb_settlement_price'] = df_base['imb_settle_price']
-    df_base['spread_target'] = df_base['imb_settlement_price'] - df_base['exec_mid']
 
-    print(f"[+] Base data: {len(df_base)} rows, {len(feature_cols)} features")
+    # Hourly-smoothed spread target (matching production script)
+    df_base['hour_ts'] = df_base.index.floor('h')
+    df_base['settle_hourly'] = df_base.groupby('hour_ts')['imb_settlement_price'].transform('mean')
+    df_base['mid_hourly'] = df_base.groupby('hour_ts')['exec_mid'].transform('mean')
+    df_base['spread_target'] = df_base['settle_hourly'] - df_base['mid_hourly']
+
+    print(f"[+] Base data: {len(df_base)} rows, {len(spread_features)} selected features")
 
     # ===== WALK-FORWARD =====
     all_oos_trades = []
@@ -115,12 +140,12 @@ def main():
 
         print(f"  Train: {len(train)}, Test: {len(test)}")
 
-        # Train spread model
+        # Train spread model (52 selected features, hourly-smoothed target)
         model = lgb.LGBMRegressor(objective='quantile', alpha=0.50, **LGB_PARAMS)
-        model.fit(train[feature_cols].values, train['spread_target'].values)
+        model.fit(train[spread_features].values, train['spread_target'].values)
 
         # Predict
-        test['pred'] = model.predict(test[feature_cols].values)
+        test['pred'] = model.predict(test[spread_features].values)
 
         # Trade with threshold=3
         surplus = test['pred'] <= -3
@@ -327,27 +352,23 @@ def main():
     ax.set_title('Daily VaR and CVaR')
     ax.legend()
 
-    # 9. Comparison: in-sample MC vs walk-forward MC
+    # 9. OOS monthly P&L heatmap-style summary
     ax = fig.add_subplot(gs[2, 2])
-    # Load the in-sample result for comparison
-    stk = pd.read_csv(BASE_DIR / "data" / "predictions" / "stacked_test_predictions.csv",
-                       parse_dates=['datetime'], index_col='datetime')
-    pred_is = stk['standalone_spread_pred']
-    trades_is = stk[(pred_is <= -3) | (pred_is >= 3)].copy()
-    trades_is['pnl'] = np.where(
-        trades_is['standalone_spread_pred'] > 0,
-        (trades_is['imb_settlement_price'] - trades_is['exec_ask']) * ENERGY,
-        (trades_is['exec_bid'] - trades_is['imb_settlement_price']) * ENERGY)
-    trades_is = trades_is[trades_is['pnl'].notna()]
-    is_daily = trades_is.groupby(trades_is.index.date)['pnl'].sum()
-
-    ax.hist(is_daily.values, bins=30, alpha=0.5, color='coral', label='In-sample (Feb-Mar)', density=True)
-    ax.hist(oos_daily.values, bins=40, alpha=0.5, color='steelblue', label='Walk-forward OOS', density=True)
-    ax.axvline(is_daily.mean(), color='coral', ls='--')
-    ax.axvline(oos_daily.mean(), color='steelblue', ls='--')
-    ax.set_xlabel('Daily P&L (EUR)')
-    ax.set_title('In-Sample vs Walk-Forward OOS Daily P&L')
-    ax.legend()
+    monthly_pnl = oos.groupby(oos.index.to_period('M'))['pnl'].sum()
+    monthly_days = oos.groupby(oos.index.to_period('M')).apply(
+        lambda x: x.index.normalize().nunique())
+    monthly_ppd = monthly_pnl / monthly_days
+    colors_m = ['green' if v > 0 else 'red' for v in monthly_ppd]
+    ax.barh(range(len(monthly_ppd)), monthly_ppd.values, color=colors_m, alpha=0.7)
+    ax.set_yticks(range(len(monthly_ppd)))
+    ax.set_yticklabels(monthly_ppd.index.astype(str), fontsize=7)
+    ax.invert_yaxis()
+    ax.axvline(0, color='gray', ls='-', alpha=0.5)
+    ax.axvline(oos_daily.mean(), color='blue', ls='--', alpha=0.5,
+               label=f'Mean={oos_daily.mean():+.0f}/day')
+    ax.set_xlabel('EUR/day')
+    ax.set_title('Walk-Forward OOS: All Monthly P&L/day')
+    ax.legend(fontsize=9)
 
     fig.savefig(PLOT_DIR / "02_walkforward_montecarlo.png", bbox_inches='tight')
     plt.close(fig)
