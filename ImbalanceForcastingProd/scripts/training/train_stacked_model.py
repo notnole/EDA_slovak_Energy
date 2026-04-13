@@ -34,17 +34,18 @@ REPO_ROOT = BASE_DIR.parent  # repo root
 
 LEAD = 8
 
-# 52 features selected by permutation importance + backward elimination + correlation pruning.
-# See: scripts/analysis/feature_selection_spread.py
-# Validation: 120 -> 52 features, P&L +417/d (was +415), drawdown -1314 (was -1488).
+# 50 features: permutation-selected 52 minus 2 leaky features (imb_price_rmean4,
+# spread_da_imb_lag) that use OKTE settlement prices available only D+1.
+# See: scripts/analysis/test_leakage_fix.py — removing them has zero P&L impact.
+# See: scripts/analysis/feature_selection_spread.py for original selection.
 SELECTED_FEATURES = [
     'da_price', 'cloudcover', 'hour_cos', 'idm_vwap_lag', 'da_supply',
     'da_price_change24h', 'proxy_rmax4', 'temp_forecast_da', 'temp_national_spread',
     'temp_bratislava', 'load_rmean16', 'nowcast_momentum_h2h3', 'temp_national_change6h',
     'da_demand', 'temp_surprise_lag', 'proxy_rmean16', 'proxy_range8', 'hour_sin',
-    'spread_da_imb_lag', 'prod_momentum', 'nowcast_pred_rmean4', 'nowcast_momentum_h4h5',
+    'prod_momentum', 'nowcast_pred_rmean4', 'nowcast_momentum_h4h5',
     'da_flow_cz', 'load_momentum', 'xborder_momentum', 'nowcast_h3', 'radiation_national',
-    'da_net_import', 'proxy_rmean32', 'nowcast_trend_h2_h5', 'dow_sin', 'imb_price_rmean4',
+    'da_net_import', 'proxy_rmean32', 'nowcast_trend_h2_h5', 'dow_sin',
     'reg_rmean8', 'reg_vol_rmean4', 'proxy_dev_from_hour', 'proxy_yesterday', 'prod_rmean8',
     'dow_cos', 'solar_surprise_lag', 'nowcast_h5', 'proxy_rmin4', 'nowcast_convergence',
     'reg_rmean4', 'is_weekend', 'proxy_yesterday_2', 'temp_rmean24h', 'proxy_range4',
@@ -60,9 +61,11 @@ FOLDS = [
     ('2026-03-01', '2026-03-01', '2026-04-01'),   # test
 ]
 
-LGB_PARAMS = dict(learning_rate=0.05, num_leaves=63, min_child_samples=50,
-                  subsample=0.8, colsample_bytree=0.7, reg_alpha=0.1,
-                  reg_lambda=1.0, n_estimators=600, verbose=-1)
+# Strong regularization: +822/d Sharpe 11.48, worst month -4k (vs baseline -8.7k).
+# See: scripts/analysis/test_leakage_fix.py (config 5), test_regularization.py
+LGB_PARAMS = dict(learning_rate=0.03, num_leaves=15, min_child_samples=200,
+                  subsample=0.5, colsample_bytree=0.5, reg_alpha=1.0,
+                  reg_lambda=10.0, n_estimators=200, verbose=-1)
 
 
 def main():
@@ -88,16 +91,10 @@ def main():
     df_base = df_base.join(ob_120, how='left')
     df_base['imb_settlement_price'] = df_base['imb_settle_price']
 
-    # Hourly-smoothed spread target: average both settlement and exec_mid to
-    # hourly resolution, then difference. Removes unpredictable QH noise —
-    # the model learns the hourly signal it can actually capture.
-    df_base['hour_ts'] = df_base.index.floor('h')
-    df_base['settle_hourly'] = df_base.groupby('hour_ts')['imb_settlement_price'].transform('mean')
-    df_base['mid_hourly'] = df_base.groupby('hour_ts')['exec_mid'].transform('mean')
-    df_base['spread_target'] = df_base['settle_hourly'] - df_base['mid_hourly']
-
-    # Raw 15-min spread (for P&L evaluation only — never trained on)
-    df_base['spread_15m'] = df_base['imb_settlement_price'] - df_base['exec_mid']
+    # Raw 15-min spread target: settlement price minus execution mid.
+    # Tested vs hourly-smoothed: identical P&L (+754 vs +757/d, see test_target_variants.py).
+    # Using raw 15-min avoids any within-hour look-ahead concern.
+    df_base['spread_target'] = df_base['imb_settlement_price'] - df_base['exec_mid']
 
     # Validate selected features exist in the full set
     spread_features = [f for f in SELECTED_FEATURES if f in feature_cols]
@@ -158,9 +155,9 @@ def main():
 
         pred_data['spread_pred'] = m_sp.predict(pred_data[spread_features].values)
 
-        if pred_data['spread_15m'].notna().sum() > 0:
-            sp_nz = pred_data['spread_15m'].abs() > 0.1
-            sp_dir = (np.sign(pred_data['spread_pred']) == np.sign(pred_data['spread_15m']))[sp_nz].mean()
+        if pred_data['spread_target'].notna().sum() > 0:
+            sp_nz = pred_data['spread_target'].abs() > 0.1
+            sp_dir = (np.sign(pred_data['spread_pred']) == np.sign(pred_data['spread_target']))[sp_nz].mean()
             print(f"    Spread OOF: dir_acc={sp_dir:.1%} (vs real 15-min spread)")
 
         # Feature importance (last fold only to avoid spam)
@@ -173,7 +170,7 @@ def main():
                 print(f"      {row['feature']:<35s} {row['pct']:.1f}%")
 
         # Save OOF
-        oof = pred_data[['spread_pred', 'imb_pred', 'target', 'spread_target', 'spread_15m',
+        oof = pred_data[['spread_pred', 'imb_pred', 'target', 'spread_target', 'spread_target',
                           'exec_bid', 'exec_ask', 'exec_spread', 'imb_settlement_price']].copy()
         all_spread_oof.append(oof)
 
@@ -243,7 +240,7 @@ def main():
         print(f"  Test dir_acc={dir_acc:.1%}, MAE={mae:.2f} MWh, n={len(imb_test)}")
 
     # Save predictions
-    out = test_df[['spread_pred', 'imb_pred', 'target', 'spread_target', 'spread_15m',
+    out = test_df[['spread_pred', 'imb_pred', 'target', 'spread_target', 'spread_target',
                     'exec_bid', 'exec_ask', 'exec_spread', 'imb_settlement_price']].copy()
     out_path = DATA_DIR / "predictions" / "spread_model_predictions.csv"
     out.to_csv(out_path)

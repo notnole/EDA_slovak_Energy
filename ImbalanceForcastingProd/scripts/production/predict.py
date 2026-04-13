@@ -44,16 +44,16 @@ from train_multi_lead import build_features
 LEAD = 8
 SCADA_SHIFT = LEAD + 1
 
-# The 52 features selected by permutation importance + backward elimination.
-# Order matters — must match the model's training order.
+# 50 features: permutation-selected minus 2 leaky features (imb_price_rmean4,
+# spread_da_imb_lag) that use OKTE settlement prices available only D+1.
 SELECTED_FEATURES = [
     'da_price', 'cloudcover', 'hour_cos', 'idm_vwap_lag', 'da_supply',
     'da_price_change24h', 'proxy_rmax4', 'temp_forecast_da', 'temp_national_spread',
     'temp_bratislava', 'load_rmean16', 'nowcast_momentum_h2h3', 'temp_national_change6h',
     'da_demand', 'temp_surprise_lag', 'proxy_rmean16', 'proxy_range8', 'hour_sin',
-    'spread_da_imb_lag', 'prod_momentum', 'nowcast_pred_rmean4', 'nowcast_momentum_h4h5',
+    'prod_momentum', 'nowcast_pred_rmean4', 'nowcast_momentum_h4h5',
     'da_flow_cz', 'load_momentum', 'xborder_momentum', 'nowcast_h3', 'radiation_national',
-    'da_net_import', 'proxy_rmean32', 'nowcast_trend_h2_h5', 'dow_sin', 'imb_price_rmean4',
+    'da_net_import', 'proxy_rmean32', 'nowcast_trend_h2_h5', 'dow_sin',
     'reg_rmean8', 'reg_vol_rmean4', 'proxy_dev_from_hour', 'proxy_yesterday', 'prod_rmean8',
     'dow_cos', 'solar_surprise_lag', 'nowcast_h5', 'proxy_rmin4', 'nowcast_convergence',
     'reg_rmean4', 'is_weekend', 'proxy_yesterday_2', 'temp_rmean24h', 'proxy_range4',
