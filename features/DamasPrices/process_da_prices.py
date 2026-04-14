@@ -135,22 +135,44 @@ def load_file(filepath: Path, year: int) -> pd.DataFrame:
 
 
 def aggregate_to_hourly(df: pd.DataFrame) -> pd.DataFrame:
-    """Aggregate sub-hourly data to hourly."""
-    period_min = df['period_min'].iloc[0]
+    """Aggregate sub-hourly data to hourly.
 
-    if period_min == 60:
-        # Already hourly
-        df['hour'] = df['period_num'] - 1  # 0-23
+    Handles mixed-resolution files (e.g., 2025 file has hourly Jan-Sep
+    and 15-min Oct-Dec after OKTE switched to QH products).
+    """
+    if 'period_min' not in df.columns:
+        # Fallback: assume hourly
+        df['hour'] = df['period_num'] - 1
         return df
 
-    print(f"  Aggregating {period_min}-minute data to hourly...")
+    has_15 = (df['period_min'] == 15).any()
+    has_60 = (df['period_min'] == 60).any()
 
-    # For 15-minute data: periods 1-4 = hour 0, 5-8 = hour 1, etc.
-    df['hour'] = (df['period_num'] - 1) // (60 // period_min)
+    if has_15 and has_60:
+        # Mixed resolution — split, process separately, recombine
+        print(f"  Mixed resolution file: {(df['period_min']==60).sum()} hourly + {(df['period_min']==15).sum()} 15-min rows")
+        df_60 = df[df['period_min'] == 60].copy()
+        df_15 = df[df['period_min'] == 15].copy()
+        df_60['hour'] = df_60['period_num'] - 1
+        df_15 = _aggregate_15min_to_hourly(df_15)
+        result = pd.concat([df_60, df_15], ignore_index=True)
+        print(f"  Combined to {len(result)} hourly records")
+        return result
+    elif has_15:
+        print(f"  Aggregating 15-minute data to hourly...")
+        return _aggregate_15min_to_hourly(df)
+    else:
+        df['hour'] = df['period_num'] - 1
+        return df
 
-    # Aggregate by date and hour
+
+def _aggregate_15min_to_hourly(df: pd.DataFrame) -> pd.DataFrame:
+    """Aggregate 15-min rows to hourly."""
+    df = df.copy()
+    df['hour'] = (df['period_num'] - 1) // 4
+
     agg_funcs = {
-        'price_eur_mwh': 'mean',  # Average price
+        'price_eur_mwh': 'mean',
         'demand_mw': 'mean',
         'supply_mw': 'mean',
         'flow_cz_to_sk': 'mean',
@@ -166,16 +188,13 @@ def aggregate_to_hourly(df: pd.DataFrame) -> pd.DataFrame:
         'year': 'first',
     }
 
-    # Also calculate price volatility within hour
     df_hourly = df.groupby(['date', 'hour']).agg(agg_funcs).reset_index()
 
-    # Add intra-hour price volatility
     price_std = df.groupby(['date', 'hour'])['price_eur_mwh'].std().reset_index()
     price_std.columns = ['date', 'hour', 'price_std_intra']
     df_hourly = df_hourly.merge(price_std, on=['date', 'hour'], how='left')
 
     print(f"  Aggregated to {len(df_hourly)} hourly records")
-
     return df_hourly
 
 
@@ -266,8 +285,14 @@ def main():
     # Create datetime
     df = create_datetime(df)
 
-    # Sort by datetime
+    # Sort by datetime and drop duplicates (multiple files may cover same dates)
     df = df.sort_values('datetime').reset_index(drop=True)
+    n_before = len(df)
+    df = df.drop_duplicates(subset=['datetime'], keep='last')
+    df = df.reset_index(drop=True)
+    n_dropped = n_before - len(df)
+    if n_dropped > 0:
+        print(f"  Dropped {n_dropped} duplicate datetime rows (overlapping source files)")
 
     # Add features
     print("Adding time features...")
