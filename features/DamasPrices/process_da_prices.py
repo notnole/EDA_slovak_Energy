@@ -262,9 +262,11 @@ def main():
 
     # Load and process each year
     dfs = []
+    dfs_raw = []  # keep raw (pre-aggregation) for QH export
     for year, filepath in FILES.items():
         if filepath.exists():
             df = load_file(filepath, year)
+            dfs_raw.append(df.copy())
             df = aggregate_to_hourly(df)
             dfs.append(df)
         else:
@@ -275,6 +277,7 @@ def main():
         for f in sorted(DA_MARKET_PATH.glob("Total_results_DAM_*.csv")):
             print(f"\n  Loading English DA file: {f.name}")
             df = load_file(f, 2026)
+            dfs_raw.append(df.copy())
             df = aggregate_to_hourly(df)
             dfs.append(df)
 
@@ -343,7 +346,79 @@ def main():
     print(f"  {OUTPUT_PATH / 'da_prices.parquet'}")
     print(f"  {OUTPUT_PATH / 'da_prices.csv'}")
 
+    # Also save native 15-min prices where available (Oct 2025+)
+    save_qh_prices(dfs_raw)
+
     return df_out
+
+
+def save_qh_prices(dfs_raw):
+    """Save native 15-min DA prices with QH-level features.
+
+    For periods before QH products (pre Oct 2025), forward-fills hourly
+    prices to 15-min. For Oct 2025+, uses actual QH clearing prices.
+
+    Features added:
+    - da_price_qh: the QH-level DA price
+    - da_price_qh_diff_prev: price change vs previous QH
+    - da_price_qh_diff_next: price change vs next QH (known D-1)
+    - da_price_qh_dev_hourly: deviation from the hourly mean
+    - da_price_qh_rank: rank within hour (0-3, 0=cheapest)
+    """
+    print("\n--- Building QH-level DA prices ---")
+
+    all_rows = []
+    for df_raw in dfs_raw:
+        if 'period_min' not in df_raw.columns:
+            continue
+
+        for _, row in df_raw.iterrows():
+            dt_base = pd.Timestamp(row['date'])
+            period_min = int(row['period_min'])
+            period_num = int(row['period_num'])
+
+            if period_min == 15:
+                # Native QH: period 1 = 00:00, period 2 = 00:15, etc.
+                minutes = (period_num - 1) * 15
+                dt = dt_base + pd.Timedelta(minutes=minutes)
+                all_rows.append({'datetime': dt, 'da_price_qh': row['price_eur_mwh']})
+            else:
+                # Hourly: expand to 4 QH with same price
+                hour = period_num - 1
+                for qh in range(4):
+                    dt = dt_base + pd.Timedelta(hours=hour, minutes=qh * 15)
+                    all_rows.append({'datetime': dt, 'da_price_qh': row['price_eur_mwh']})
+
+    qh_df = pd.DataFrame(all_rows)
+    qh_df['datetime'] = pd.to_datetime(qh_df['datetime'])
+    qh_df = qh_df.sort_values('datetime').drop_duplicates(subset='datetime', keep='last')
+    qh_df = qh_df.set_index('datetime')
+
+    # QH-level features (all known D-1, no shift needed)
+    qh_df['da_price_qh_diff_prev'] = qh_df['da_price_qh'].diff()
+    qh_df['da_price_qh_diff_next'] = -qh_df['da_price_qh'].diff(-1)
+
+    # Deviation from hourly mean
+    hour_ts = qh_df.index.floor('h')
+    hourly_mean = qh_df.groupby(hour_ts)['da_price_qh'].transform('mean')
+    qh_df['da_price_qh_dev_hourly'] = qh_df['da_price_qh'] - hourly_mean
+
+    # Rank within hour (0=cheapest, 3=most expensive)
+    qh_df['da_price_qh_rank'] = qh_df.groupby(hour_ts)['da_price_qh'].rank(method='min') - 1
+
+    out_path = OUTPUT_PATH / 'data' / 'da_prices_qh.csv'
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    qh_df.to_csv(out_path)
+
+    # Stats
+    native_qh = qh_df[qh_df.index >= '2025-10-01']
+    if len(native_qh) > 0:
+        print(f"  Total QH rows: {len(qh_df)}")
+        print(f"  Native 15-min (Oct 2025+): {len(native_qh)} rows")
+        print(f"  Intra-hour price std (native): {native_qh['da_price_qh_dev_hourly'].std():.2f} EUR/MWh")
+        print(f"  Mean |diff_prev|: {native_qh['da_price_qh_diff_prev'].abs().mean():.2f} EUR/MWh")
+        print(f"  Mean |diff_next|: {native_qh['da_price_qh_diff_next'].abs().mean():.2f} EUR/MWh")
+    print(f"  Saved: {out_path}")
 
 
 if __name__ == '__main__':

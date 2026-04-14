@@ -116,7 +116,7 @@ def load_all_data():
         damas_15 = damas[['forecast_error_mw', 'forecast_error_pct', 'forecast_load_mw']].resample('15min').ffill()
         print(f"[+] DAMAS load: {len(damas_15)} periods")
 
-    # DA prices
+    # DA prices (hourly, forward-filled to 15-min)
     path = REPO_ROOT / "features" / "DamasPrices" / "data" / "da_prices.csv"
     da_15 = None
     if path.exists():
@@ -127,6 +127,16 @@ def load_all_data():
         da = _dedup_index(da[keep])
         da_15 = da.resample('15min').ffill()
         print(f"[+] DA prices: {len(da_15)} periods")
+
+    # DA prices at QH resolution (native 15-min from Oct 2025, hourly-expanded before)
+    da_qh_path = REPO_ROOT / "features" / "DamasPrices" / "data" / "da_prices_qh.csv"
+    if da_qh_path.exists() and da_15 is not None:
+        da_qh = pd.read_csv(da_qh_path, parse_dates=['datetime']).set_index('datetime').sort_index()
+        da_qh = _dedup_index(da_qh)
+        qh_cols = [c for c in ['da_price_qh', 'da_price_qh_diff_prev', 'da_price_qh_diff_next',
+                    'da_price_qh_dev_hourly', 'da_price_qh_rank'] if c in da_qh.columns]
+        da_15 = da_15.join(da_qh[qh_cols], how='left')
+        print(f"[+] DA QH prices: {da_qh[qh_cols[0]].notna().sum()} periods with QH data")
 
     # Market spreads
     path = REPO_ROOT / "MarketPriceGap" / "data" / "processed" / "hourly_market_prices.csv"
@@ -402,6 +412,20 @@ def build_features(data, lead):
     else:
         for f in ['da_price', 'da_price_change24h', 'da_demand', 'da_supply',
                    'da_net_import', 'da_flow_cz', 'da_flow_hu']:
+            features[f] = pd.Series(np.nan, index=df.index)
+
+    # --- DA QH PRICES (D-1, no shift, 15-min resolution) ---
+    # Native QH clearing prices from Oct 2025; hourly-expanded before that.
+    # All known D-1 so no shift needed.
+    if 'da_price_qh' in df.columns:
+        features['da_price_qh'] = df['da_price_qh']
+        features['da_price_qh_diff_prev'] = df.get('da_price_qh_diff_prev', pd.Series(np.nan, index=df.index))
+        features['da_price_qh_diff_next'] = df.get('da_price_qh_diff_next', pd.Series(np.nan, index=df.index))
+        features['da_price_qh_dev_hourly'] = df.get('da_price_qh_dev_hourly', pd.Series(np.nan, index=df.index))
+        features['da_price_qh_rank'] = df.get('da_price_qh_rank', pd.Series(np.nan, index=df.index))
+    else:
+        for f in ['da_price_qh', 'da_price_qh_diff_prev', 'da_price_qh_diff_next',
+                   'da_price_qh_dev_hourly', 'da_price_qh_rank']:
             features[f] = pd.Series(np.nan, index=df.index)
 
     # --- MARKET SPREADS (hourly, shift = lead + 4) ---
