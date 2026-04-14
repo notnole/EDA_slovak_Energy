@@ -12,7 +12,7 @@ prices to hourly resolution before differencing. This removes
 unpredictable QH noise and lets the model focus on the learnable
 hourly signal. P&L is always evaluated on real 15-min settlement.
 
-Folds 1-3 build up OOF history. Folds 4-5 are the test period.
+Folds 1-5 build up OOF history. Folds 6-7 are the test period.
 """
 
 import pandas as pd
@@ -34,8 +34,10 @@ REPO_ROOT = BASE_DIR.parent  # repo root
 
 LEAD = 8
 
-# 50 features: permutation-selected 52 minus 2 leaky features (imb_price_rmean4,
-# spread_da_imb_lag) that use OKTE settlement prices available only D+1.
+# 47 features: permutation-selected 52 minus 2 leaky features (imb_price_rmean4,
+# spread_da_imb_lag) that use OKTE settlement prices available only D+1,
+# minus 3 short-coverage features (prod_momentum, xborder_momentum, prod_rmean8)
+# that start Oct 2025 with 0% importance — removing them extends training to Jan 2025.
 # See: scripts/analysis/test_leakage_fix.py — removing them has zero P&L impact.
 # See: scripts/analysis/feature_selection_spread.py for original selection.
 SELECTED_FEATURES = [
@@ -43,10 +45,10 @@ SELECTED_FEATURES = [
     'da_price_change24h', 'proxy_rmax4', 'temp_forecast_da', 'temp_national_spread',
     'temp_bratislava', 'load_rmean16', 'nowcast_momentum_h2h3', 'temp_national_change6h',
     'da_demand', 'temp_surprise_lag', 'proxy_rmean16', 'proxy_range8', 'hour_sin',
-    'prod_momentum', 'nowcast_pred_rmean4', 'nowcast_momentum_h4h5',
-    'da_flow_cz', 'load_momentum', 'xborder_momentum', 'nowcast_h3', 'radiation_national',
+    'nowcast_pred_rmean4', 'nowcast_momentum_h4h5',
+    'da_flow_cz', 'load_momentum', 'nowcast_h3', 'radiation_national',
     'da_net_import', 'proxy_rmean32', 'nowcast_trend_h2_h5', 'dow_sin',
-    'reg_rmean8', 'reg_vol_rmean4', 'proxy_dev_from_hour', 'proxy_yesterday', 'prod_rmean8',
+    'reg_rmean8', 'reg_vol_rmean4', 'proxy_dev_from_hour', 'proxy_yesterday',
     'dow_cos', 'solar_surprise_lag', 'nowcast_h5', 'proxy_rmin4', 'nowcast_convergence',
     'reg_rmean4', 'is_weekend', 'proxy_yesterday_2', 'temp_rmean24h', 'proxy_range4',
     'proxy_lag12', 'proxy_pos_ratio_4', 'proxy_lag21', 'proxy_lag18', 'damas_fe_rmean4',
@@ -54,11 +56,13 @@ SELECTED_FEATURES = [
 
 FOLDS = [
     # (train_end, pred_start, pred_end)
-    ('2025-07-01', '2025-07-01', '2025-10-01'),
-    ('2025-10-01', '2025-10-01', '2026-01-01'),
-    ('2026-01-01', '2026-01-01', '2026-02-01'),
-    ('2026-02-01', '2026-02-01', '2026-03-01'),   # test
-    ('2026-03-01', '2026-03-01', '2026-04-01'),   # test
+    ('2025-04-01', '2025-01-01', '2025-04-01'),   # warmup: Jan-Mar 2025
+    ('2025-07-01', '2025-04-01', '2025-07-01'),   # warmup: Apr-Jun 2025
+    ('2025-10-01', '2025-07-01', '2025-10-01'),
+    ('2026-01-01', '2025-10-01', '2026-01-01'),
+    ('2026-02-01', '2026-01-01', '2026-02-01'),
+    ('2026-03-01', '2026-02-01', '2026-03-01'),   # test
+    ('2026-04-10', '2026-03-01', '2026-04-10'),   # test (extended to Apr 9)
 ]
 
 # Strong regularization: +822/d Sharpe 11.48, worst month -4k (vs baseline -8.7k).
@@ -183,7 +187,7 @@ def main():
     print("=" * 70)
 
     # Collect test predictions
-    test_folds = [s for fi, s in enumerate(all_spread_oof) if fi >= 3]  # folds 4-5
+    test_folds = [s for fi, s in enumerate(all_spread_oof) if fi >= 5]  # folds 6-7
     if not test_folds:
         print("[!] No test fold predictions")
         return
