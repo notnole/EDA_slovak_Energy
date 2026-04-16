@@ -44,20 +44,18 @@ from train_multi_lead import build_features
 LEAD = 8
 SCADA_SHIFT = LEAD + 1
 
-# 50 features: permutation-selected minus 2 leaky features (imb_price_rmean4,
-# spread_da_imb_lag) that use OKTE settlement prices available only D+1.
+# 30 features: Top-30 permutation importance (P&L-driven) on full 64k dataset,
+# after removing 2 leaky features (imb_price_rmean4, spread_da_imb_lag) and
+# correlation pruning (|r|>0.95). Must match train_stacked_model.py exactly.
 SELECTED_FEATURES = [
-    'da_price', 'cloudcover', 'hour_cos', 'idm_vwap_lag', 'da_supply',
-    'da_price_change24h', 'proxy_rmax4', 'temp_forecast_da', 'temp_national_spread',
-    'temp_bratislava', 'load_rmean16', 'nowcast_momentum_h2h3', 'temp_national_change6h',
-    'da_demand', 'temp_surprise_lag', 'proxy_rmean16', 'proxy_range8', 'hour_sin',
-    'prod_momentum', 'nowcast_pred_rmean4', 'nowcast_momentum_h4h5',
-    'da_flow_cz', 'load_momentum', 'xborder_momentum', 'nowcast_h3', 'radiation_national',
-    'da_net_import', 'proxy_rmean32', 'nowcast_trend_h2_h5', 'dow_sin',
-    'reg_rmean8', 'reg_vol_rmean4', 'proxy_dev_from_hour', 'proxy_yesterday', 'prod_rmean8',
-    'dow_cos', 'solar_surprise_lag', 'nowcast_h5', 'proxy_rmin4', 'nowcast_convergence',
-    'reg_rmean4', 'is_weekend', 'proxy_yesterday_2', 'temp_rmean24h', 'proxy_range4',
-    'proxy_lag12', 'proxy_pos_ratio_4', 'proxy_lag21', 'proxy_lag18', 'damas_fe_rmean4',
+    'da_price_qh', 'temp_national_change6h', 'da_demand', 'nowcast_momentum_h2h3',
+    'nowcast_trend_h2_h5', 'idm_vwap_lag', 'da_flow_cz', 'prod_rmean8',
+    'spread_da_idm_lag', 'nowcast_h5', 'damas_fe_rmean4', 'reg_rmean8',
+    'nowcast_momentum_h3h4', 'da_price_qh_dev_hourly', 'proxy_lag9',
+    'proxy_lag96_diff', 'da_price_qh_diff_next', 'dow_sin', 'wind_national',
+    'temp_surprise_lag', 'proxy_lag15', 'prod_momentum', 'nowcast_pred_rmean4',
+    'hour_sin', 'da_net_import', 'is_weekend', 'temp_bratislava', 'da_supply',
+    'xborder_vol', 'xborder_deviation',
 ]
 
 
@@ -69,16 +67,32 @@ def _dedup_index(df):
 class SpreadPredictor:
     """Production spread predictor. Uses the exact same feature engineering as training."""
 
-    def __init__(self, model_path, train_end='2026-01-31'):
+    def __init__(self, model_path, train_end=None):
         """
         Args:
             model_path: path to trained LightGBM .joblib file
             train_end: date string for the train/test boundary. Controls the
                        frozen baselines (proxy hourly mean, etc.) used in
-                       build_features. Must match the value used during training.
+                       build_features. If None, reads from metadata JSON
+                       next to the model file. For production models trained
+                       on all data, this is set far in the future ('2099-01-01').
         """
         self.model = joblib.load(model_path)
-        self.train_end = train_end
+
+        if train_end is None:
+            # Try to load from metadata
+            meta_path = Path(model_path).with_name(
+                Path(model_path).stem + '_metadata.json')
+            if meta_path.exists():
+                import json
+                with open(meta_path) as f:
+                    meta = json.load(f)
+                # Production model: use far-future so all data is "training"
+                self.train_end = '2099-01-01'
+            else:
+                self.train_end = '2099-01-01'
+        else:
+            self.train_end = train_end
 
     def predict(self, regulation_3min, load_3min, production_3min=None,
                 export_import_3min=None, solar_hourly=None, damas_load=None,
@@ -95,7 +109,7 @@ class SpreadPredictor:
               - prediction: float, the spread prediction (EUR/MWh)
               - timestamp: the prediction timestamp (15-min period)
               - signal: 'surplus' | 'deficit' | 'no_trade'
-              - features: pd.Series of the 52 feature values used
+              - features: pd.Series of the 30 feature values used
         """
         # Build the data dict in the same format as load_all_data() returns
         data = self._prepare_data_dict(

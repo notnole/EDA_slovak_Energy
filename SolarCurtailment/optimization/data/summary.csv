@@ -1,0 +1,5 @@
+strategy,rev_per_mwh,X,A,Y
+No curtailment,112.24323256305028,,,
+Current (pred>15),111.00517548062957,15.0,,
+Best Rule 1,112.24323256305028,27.0,,
+Best Combined,112.2433408358986,47.0,0.0,4.0

@@ -71,17 +71,22 @@ plt.rcParams.update({
 LEAD = 8
 N_PERM_REPEATS = 10  # shuffles per feature for stable estimates
 
-LGB_PARAMS = dict(learning_rate=0.05, num_leaves=63, min_child_samples=50,
-                  subsample=0.8, colsample_bytree=0.7, reg_alpha=0.1,
-                  reg_lambda=1.0, n_estimators=600, verbose=-1)
+LGB_PARAMS = dict(learning_rate=0.03, num_leaves=15, min_child_samples=200,
+                  subsample=0.5, colsample_bytree=0.5, reg_alpha=1.0,
+                  reg_lambda=10.0, n_estimators=200, verbose=-1)
 
 # Walk-forward folds: train on everything before test start
+# Match train_stacked_model.py fold structure
 FOLDS = [
     {'name': 'Feb2026', 'train_end': '2026-02-01', 'test_start': '2026-02-01', 'test_end': '2026-03-01'},
     {'name': 'Mar2026', 'train_end': '2026-03-01', 'test_start': '2026-03-01', 'test_end': '2026-04-01'},
+    {'name': 'Apr2026', 'train_end': '2026-04-01', 'test_start': '2026-04-01', 'test_end': '2026-04-10'},
 ]
 
 PRED_THRESHOLD = 3  # EUR/MWh — minimum |prediction| to trade
+
+# Features known to be leaky (use D+1 settlement prices, not available at trade time)
+LEAKY_FEATURES = {'spread_da_imb_lag', 'imb_price_rmean4'}
 
 
 # ============================================================
@@ -162,13 +167,12 @@ def prepare_data():
     # as 'imb_settle_price' via build_features).
     df_base['imb_settlement_price'] = df_base['imb_settle_price']
 
-    # Hourly-smoothed spread target (matching production train_stacked_model.py)
-    df_base['hour_ts'] = df_base.index.floor('h')
-    df_base['settle_hourly'] = df_base.groupby('hour_ts')['imb_settlement_price'].transform('mean')
-    df_base['mid_hourly'] = df_base.groupby('hour_ts')['exec_mid'].transform('mean')
-    df_base['spread_target'] = df_base['settle_hourly'] - df_base['mid_hourly']
+    # Raw 15-min spread target (matching production train_stacked_model.py)
+    df_base['spread_target'] = df_base['imb_settlement_price'] - df_base['exec_mid']
 
-    print(f"[+] Base features: {len(feature_cols)} columns, {len(df_base)} rows")
+    # Remove known leaky features
+    feature_cols = [f for f in feature_cols if f not in LEAKY_FEATURES]
+    print(f"[+] Base features: {len(feature_cols)} columns (after removing {len(LEAKY_FEATURES)} leaky), {len(df_base)} rows")
     return df_base, feature_cols
 
 
