@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python ImbalanceForcastingProd/scripts/extract_orderbook_qh.py)",
+      "Bash(python ImbalanceForcastingProd/scripts/backtest_realistic.py)"
+    ]
+  }
+}
