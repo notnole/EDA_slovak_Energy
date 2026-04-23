@@ -13,6 +13,7 @@ from __future__ import annotations
 import os
 from datetime import datetime, timezone
 from typing import Iterable
+from urllib.parse import quote
 
 import pandas as pd
 import requests
@@ -44,7 +45,7 @@ class VectordClient:
         """Read raw points for a vector between start and end (UTC)."""
         s = _iso(start)
         e = _iso(end)
-        url = f"{self.base_url}/read/{vector}/{s}/{e}"
+        url = f"{self.base_url}/read/{quote(vector, safe='')}/{s}/{e}"
         r = self._session.get(url, timeout=self.timeout)
         r.raise_for_status()
         body = r.json()
@@ -74,7 +75,7 @@ class VectordClient:
         """Write points to a vector. Accepts dicts with time/value, or a
         pandas Series/DataFrame with a DatetimeIndex."""
         payload = _to_payload(points)
-        url = f"{self.base_url}/write/{vector}"
+        url = f"{self.base_url}/write/{quote(vector, safe='')}"
         r = self._session.post(url, json=payload, timeout=self.timeout)
         r.raise_for_status()
         return r.json()

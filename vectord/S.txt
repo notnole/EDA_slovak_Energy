@@ -1,0 +1,143 @@
+﻿                          Výber                     Kód                       Atribút                   Poznámka                  
+1                         True                      Adelta                    RBO - Delta výkonu ( Pdod - PP_Pdb)                           
+2                         True                      BAT_Flex                  Zaradená flexibilita (výkon)                           
+3                         True                      CAP.INST                  Inštalovaná kapacita BESS (Dosiahnuteľná v regulácii ~10-90%)                           
+4                         False                     CAP.INST.K                Koeficient inštalovanej kapacity                            
+5                         False                     DRV                       V diaľkovom riadení (Blok resp Lokalita)                           
+6                         False                     DT.ORD_I.P                DT Objednávka - Price     Denný trh - cena zadaná pri objednávke pre daný blok 
+7                         False                     DT.ORD_I.V                DT Objednávka - Volume    Denný trh - objem objednaný pre daný blok 
+8                         False                     DT.RES.V                  DT - Výsledok saldo [Final] Denný trh - Výsledné saldo - kombinácia input a vektora manualneho preťaženia 
+9                         False                     DT.RES_B.V                DT - Výsledok denného nákupu (Flag) [DT Result Buy - Volume] Denný trh - výsledok denného nakúpeného množstva podľa poznámky 
+10                        False                     DT.RES_S.V                DT - Výsledok denného predaja (Flag) [DT Result Sell - Volume] Denný trh - výsledok denného predaného množstva podľa poznámky 
+11                        False                     EDC_Flx_n                 EDC - Odoslané Flexibilita - finálna (Len Záporny smer)                           
+12                        False                     EDC_Flx_p                 EDC - Odoslané Flexibilita - finálna (Len Kladný smer)                           
+13                        False                     EDC_Pdb                   EDC - Pdb stiahnuté z EDC                           
+14                        False                     EDC_Pdb_O                 EDC - Odoslané Pdb                                  
+15                        False                     EDC_PdbkW                 EDC - Pdb stiahnuté z EDC                           
+16                        False                     EDC_Pdod_n                EDC - Odoslané Skutočný dodaný výkon (Len Záporny smer) - odber                           
+17                        False                     EDC_Pdod_p                EDC - Odoslané Skutočný dodaný výkon (Len Kladný smer)                           
+18                        False                     EDC_PpS_Bl                EDC - Odoslané PpS - Zaradenie v bloku PpS (1/0) - Aktivácia flx                           
+19                        False                     EDCx18PL                  EDC Flag - AGR18 Plán                               
+20                        False                     EDCx18SK                  EDC Flag - AGR18 Skutočnosť                           
+21                        False                     EDCx19Pdg                 EDC Flag - AGR19 Stiahnuté Pdg                           
+22                        False                     EDCxFlx_n                 EDC Flag - Odoslané Flexibilita záp. (0-neod., 0.5-rozd., 1-ok)                           
+23                        False                     EDCxFlx_p                 EDC Flag - Flexibilita klad. (0-neod., 0.5-rozd., 1-ok)                           
+24                        False                     EDCxPdb_O                 EDC Flag - Odoslané Pdb (0-neod., 0.5-rozd., 1-ok)                           
+25                        False                     EDCxPdod_n                EDC Flag - Odoslané dodaný výkon - (0-neod., 0.5-rozd., 1-ok)                           
+26                        False                     EDCxPdod_p                EDC Flag - Odoslané dodaný výkon + (0-neod., 0.5-rozd., 1-ok)                           
+27                        False                     EDCxPpS_Bl                EDC Flag - Aktivácia flx (0-neod., 0.5-rozd., 1-ok)                           
+28                        False                     Flx                       Flexibilita - finálna                               
+29                        False                     Flx_calc                  Flexibilita - skutočná                              
+30                        False                     Flx_calcS                 Flexibilita - skutočná (Calc H)                           
+31                        False                     Flx_man                   Flexibilita - manuálna korekcia                           
+32                        False                     Flx_neg                   Flexibilita - finálna (Len Záporny smer)                            
+33                        False                     Flx_nkW                   Flexibilita - finálna (Len Záporny smer)  [kW]                           
+34                        False                     Flx_pkW                   Flexibilita - finálna (Len Kladný smer) [kW]                           
+35                        False                     Flx_pos                   Flexibilita - finálna (Len Kladný smer)                            
+36                        False                     FlxDod                    Flexibilita - Dodávka                               
+37                        False                     FlxDod_nkW                Flexibilita - Dodávka (Len Záporny smer)  [kW]                           
+38                        False                     FlxDod_pkW                Flexibilita - Dodávka (Len Kladný smer) [kW]                           
+39                        False                     FlxOdb                    Flexibilita - Odber                                 
+40                        False                     FlxOdb_nkW                Flexibilita - Dodávka (Len Záporny smer)  [kW]                           
+41                        False                     FlxOdb_pkW                Flexibilita - Dodávka (Len Kladný smer) [kW]                           
+42                        False                     IncomeTax                 Celkový Príjem za reguláciu s poplatkami                           
+43                        False                     LFC_Blok                  TASDR - Zaradenie v bloku  (0-nezar./1 - PpS /2 - RBO)                           
+44                        False                     ODCH_Cena                 SEPS - Cena odchýlky sústavy (Kombinovaná D, M, Dek, Knč                           
+45                        False                     Pdb                       Pdb                                                 
+46                        False                     Pdb_PpS                   Pdb diagramový bod subjektu iba PpS                           
+47                        False                     PdbkW                     Pdb  [kW]                                           
+48                        False                     Pdelta                    RBO - Delta výkonu (Plan - Pskut - RE)                           
+49                        False                     PDG.DT                    PDG DT - výkon zo Spotu                             
+50                        False                     PDG.DT_VDA                PDG Suma DT+ VDA + PPplus                           
+51                        False                     PDG.IDA1                  PDG IDA1 - výkon z VDA1                             
+52                        False                     PDG.IDA2                  PDG IDA2 - výkon z VDA2                             
+53                        False                     PDG.IDA3                  PDG IDA3 - výkon z VDA3                             
+54                        False                     PDG.PLUS                  PDG+ Manuálne pripočítanie Pdg k VDT obchodom                           
+55                        False                     PDG.TRH                   PDG Suma DT+ VDA + VDT                              
+56                        False                     PDG.TRHPPp                PDG Suma DT+ VDA + VDT+ PPplus                           
+57                        False                     PDG.VDA                   PDG VDA - suma zobchodovaný výkonov IDA123                           
+58                        False                     PDG.VDT                   PDG VDT - Zobchodované Saldo                           
+59                        True                      Pdod                      Skutočný dodaný výkon                               
+60                        False                     Pdod_neg                  Skutočný dodaný výkon (Len Záporny smer) - odber                           
+61                        False                     Pdod_nkW                  Skutočný dodaný výkon (Len Záporny smer) - odber                           
+62                        False                     Pdod_pkW                  Skutočný dodaný výkon (Len Kladný smer)                           
+63                        False                     Pdod_pos                  Skutočný dodaný výkon (Len Kladný smer)                           
+64                        False                     PdodkW                    Skutočný dodaný výkon                               
+65                        False                     PdodS                     Skutočný dodaný výkon                               
+66                        False                     PdodS_neg                 Skutočný dodaný výkon (Len Záporny smer) - odber                           
+67                        False                     PdodS_pos                 Skutočný dodaný výkon (Len Kladný smer)                           
+68                        False                     PP_aFRRd                  Poskytovanie / neposkytovanie aFRR                           
+69                        False                     PP_Blok                   Plánované zaradenie subjektu do Bloku (1 - PpS, 2 - RBO)                           
+70                        False                     PP_Crem                   Plánovaná Max. cena zápornej regulácie - Cre-                           
+71                        False                     PP_Crep                   Plánovaná Min. cena kladnej regulácie - Cre+                           
+72                        False                     PP_FCRd                   Poskytovanie / neposkytovanie FCR                           
+73                        False                     PP_Fx                     Plánovaná flexibilita (z PP) - min z +/-                           
+74                        False                     PP_Fxn                    Plánovaná záporná flexibilita (z PP)                           
+75                        False                     PP_Fxn_PpS                Plánovaná záporná flexibilita (z PP) iba PpS                           
+76                        False                     PP_Fxn_RBO                Plánovaná záporná flexibilita (z PP) iba RBO                           
+77                        False                     PP_Fxp                    Plánovaná kladná flexibilita (z PP)                           
+78                        False                     PP_Fxp_PpS                Plánovaná kladná flexibilita (z PP) iba PpS                           
+79                        False                     PP_Fxp_RBO                Plánovaná kladná flexibilita (z PP) iba RBO                           
+80                        False                     PP_mFRRd                  Poskytovanie / neposkytovanie mFRR                           
+81                        False                     PP_Pdb                    Plánovaný Pdb diagramový bod subjektu (z PP)                           
+82                        False                     PP_Pdb_PpS                Plánovaný Pdb diagramový bod subjektu (z PP) iba PpS                           
+83                        False                     PP_Pdb_RBO                Plánovaný Pdb diagramový bod subjektu (z PP) iba RBO                           
+84                        False                     PpS_Blok                  PpS - Zaradenie v bloku PpS - 1 (1/0)                           
+85                        False                     PpS_Income                PpS - Príjem spolu                                  
+86                        False                     PpS_RE                    PpS - Regulacka vyhodnotenie z DaE                           
+87                        False                     PpS_RE_Vyk                PpS - Regulacka vyhodnotenie z DaE                           
+88                        False                     PRC.DT                    Cena za DT                                          
+89                        False                     PRC.IDA1                  Cena za IDA1                                        
+90                        False                     PRC.IDA2                  Cena za IDA2                                        
+91                        False                     PRC.IDA3                  Cena za IDA3                                        
+92                        False                     PRC.TRH                   Cena za TRH = DT + VDA + VDT                           
+93                        False                     PRC.VDT                   Cena za VDT (predaj - nákup)                           
+94                        False                     PRC_A.DVDA                Priemerná Cena za obchody (DT,VDA)                           
+95                        False                     PRC_A.TRH                 Priemerná Cena za obchody (DT,VDA,VDT)                           
+96                        False                     RBO_Adelta                RBO - Delta práca ( Pskut - Plan - RE)                           
+97                        False                     RBO_Blok                  RBO - Zaradenie v bloku RBO - 2 (1/0)                           
+98                        False                     RBO_Income                RBO - Príjem za reguláciu bez poplatkov                           
+99                        False                     RBO_IncTax                RBO - Príjem za reguláciu s poplatkami                           
+100                       False                     RBO_OK_IO                 RBO - Trafenie sa proti odchylke systemu I/O                           
+101                       False                     RBO_Pdelta                RBO - Delta výkonu ( Pskut - Plan - RE)                           
+102                       False                     RBO_Pdziad                RBO - Delta žiadaného výkonu (Plan - Pžiad)                           
+103                       False                     RBO_Pminus                RBO - Zníženie výkonu                               
+104                       False                     RBO_Pplus                 RBO - Zvýšenie výkonu                               
+105                       False                     RBO_RE                    RBO RE                                              
+106                       False                     RBO_REn                   RBO RE- (Záporná regulácia)                           
+107                       False                     RBO_REp                   RBO RE+ (Kladná regulácia)                           
+108                       False                     RBO_Rozs_n                RBO - Regulačný rozsah - (záporný)                           
+109                       False                     RBO_Rozs_p                RBO - Regulačný rozsah + (kladný)                           
+110                       False                     RBO_Suc_IO                RBO - Delta žiadaného a skutočného výkonu sú v zhode                           
+111                       False                     RBO_Tax                   RBO - Poplatky                                      
+112                       False                     RBO_VPCm                  RBO - VPC mínus IO                                  
+113                       False                     RBO_VPCp                  RBO - VPC plus IO                                   
+114                       False                     RBO_VyuRoz                RBO - Využitie regulačného rozsahu                           
+115                       False                     RE_aFRR_S                 RE - aFRR prepočítaná pomerovo oproti vyhodnoteniu z DaE                           
+116                       False                     RE_aFRR_T                 RE - Optimálna aFRR z TASDR                           
+117                       False                     RE_aFRR_TS                RE - Optimálna aFRR z TASDR                           
+118                       False                     SEP_3M_GCC                SEPS - 3 minútová regulačná elektrina                           
+119                       False                     SEP_ODCH                  SEPS - Odchýlka sústavy                             
+120                       False                     SoC.15M                   Priebeh SoC (15min)                                 
+121                       False                     SoC.1M                    Priebeh SoC (1min)                                  
+122                       False                     SoC.Actual                Aktuálne SoC                                        
+123                       False                     SoC.Plan                  Planovany priebeh SoC (Podla DT,VDA,VDT,PP+)                           
+124                       False                     SoC_HL                    SoC HL - max rezerva pre RBO- (Pre VDT) Aby RBO- nenabijalo viacej ako je kupene na VDT (drzi tam rezervu) 
+125                       False                     SoC_LL                    SoC LL - min rezerva pre RBO+ (Pre VDT) Aby RBO+ nevybijalo viacej ako je predane na VDT (drzi tam rezervu) 
+126                       False                     SoC_TechH                 SoC - Horný limit                                   
+127                       False                     SoC_TechL                 SoC - Dolný limit                                   
+128                       False                     VDT.Avol                  VDT zobchodovaná práca                              
+129                       False                     VDT.Avoln                 VDT nákup – práca                                   
+130                       False                     VDT.Avolp                 VDT predaj - práca                                  
+131                       False                     VDT.Buy.JC                VDT jednotková cena nákup                           
+132                       False                     VDT.COSTn                 VDT cena nákup                                      
+133                       False                     VDT.COSTp                 VDT cena predaj                                     
+134                       False                     VDT.Income                VDT príjem                                          
+135                       False                     VDT.OP.BUY                VDT Otvorené množstvo - Nákup                           
+136                       False                     VDT.OP.SEL                VDT Otvorené množstvo - Predaj                           
+137                       False                     VDT.Pvol                  VDT Zobchodované saldo                              
+138                       False                     VDT.Pvoln                 VDT nákup - výkon                                   
+139                       False                     VDT.Pvolp                 VDT predaj - výkon                                  
+140                       False                     VDT.Sel.JC                VDT jednotková cena predaj                           
+141                       False                     VDT_Cycl                  VDT - počet cyklov                                  
+

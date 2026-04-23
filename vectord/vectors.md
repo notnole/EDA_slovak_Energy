@@ -11,6 +11,10 @@ signal cadence — vectord just returns whatever is stored.
   a bug to fix.
 - Authoritative source: `infra/ansible/templates/lopatovac-config.yaml.j2`
   (pipeline definitions). If you need something not on this list, grep there.
+- **Per-asset vectors (batteries, generation blocks) follow a different
+  namespace** — see [`localities.md`](localities.md) for the
+  `EMS#UNT..#<LOCALITY>#<ATTRIBUTE>` norm and `S.txt` for the attribute
+  catalogue.
 
 ---
 
@@ -31,7 +35,12 @@ signal cadence — vectord just returns whatever is stored.
 | Vector | What |
 |--------|------|
 | `F.B.Odchylka` | BEAM imbalance prediction (written by lopatovac from `predictions.xgb_normal`) |
-| `Okte.Odchylka` | System imbalance from OKTE, 15-min |
+| `Okte.Odchylka` | System imbalance from OKTE, 15-min — **initial** publication |
+| `Okte.RiadneDenne.Odchylka` | OKTE regular daily revision, 15-min |
+| `Okte.Dekadne.Odchylka` | OKTE 10-day revision, 15-min |
+| `Okte.Mesacne.Odchylka` | OKTE monthly revision, 15-min |
+| `Okte.Konecne.Odchylka` | OKTE final settlement, 15-min |
+| `Okte.Combine.Odchylka` | Computed: most-settled available per timestamp (combines the five above in order initial → daily → 10-day → monthly → final). Use this for backtesting against settled truth. |
 
 ## Marginal prices — PICASSO (SEPS)
 
